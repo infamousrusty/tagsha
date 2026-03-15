@@ -111,7 +111,6 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Security — Gosec SAST, Trivy filesystem secret scan
-  # Requires on runner: trivy v0.69.3, gosec v2.21.4 (pre-installed at /usr/bin)
   # ---------------------------------------------------------------------------
   security-scan:
     name: Security Scanning
@@ -165,7 +164,8 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Docker — build, push to GHCR, container scan (main only)
-  # Requires on runner: trivy v0.69.3 (pre-installed at /usr/bin)
+  # Uses 'docker' driver to avoid Docker Hub rate limits / outages during
+  # BuildKit container initialisation.
   # ---------------------------------------------------------------------------
   docker-build:
     name: Docker Build and Push
@@ -182,6 +182,8 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+        with:
+          driver: docker
 
       - name: Log in to GHCR
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
@@ -208,10 +210,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: VERSION=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: true
-          sbom: true
+          provenance: false
 
       - name: Trivy container vulnerability scan
         run: |

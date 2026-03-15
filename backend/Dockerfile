@@ -1,7 +1,8 @@
 # =============================================================================
 # Stage 1 — Builder
 # =============================================================================
-FROM golang:1.22-alpine AS builder
+# Using GHCR mirror to avoid Docker Hub rate limits / outages
+FROM ghcr.io/infamousrusty/golang:1.22-alpine AS builder
 
 RUN apk add --no-cache ca-certificates tzdata git
 
@@ -14,9 +15,6 @@ RUN go mod download && go mod verify
 COPY . .
 
 # Build the main binary with hardening flags.
-# CGO_ENABLED=0 produces a fully static binary (no libc dependency).
-# -trimpath removes build host path from binary.
-# -ldflags "-s -w" strips debug symbols.
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build \
@@ -30,19 +28,16 @@ RUN printf 'package main\nimport("fmt";"net/http";"os")\nfunc main(){r,e:=http.G
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o healthcheck /build/hc.go
 
 # =============================================================================
-# Stage 2 — Runtime (scratch — no shell, minimal attack surface)
+# Stage 2 — Runtime (scratch)
 # =============================================================================
 FROM scratch
 
-# TLS CA certificates and timezone data only.
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 
-# Application binaries.
 COPY --from=builder /build/tagsha-api    /usr/local/bin/tagsha-api
 COPY --from=builder /build/healthcheck   /usr/local/bin/healthcheck
 
-# Non-root UID.
 USER 1000:1000
 
 EXPOSE 8080
