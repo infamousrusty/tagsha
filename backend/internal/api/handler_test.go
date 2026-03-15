@@ -2,7 +2,6 @@ package api_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -37,14 +36,14 @@ func newTestHandler(t *testing.T) (*api.Handler, *miniredis.Miniredis) {
 			})
 		case "/repos/golang/go/commits/abc123":
 			json.NewEncoder(w).Encode(map[string]interface{}{
-				"sha": "abc123",
+				"sha":      "abc123",
 				"html_url": "https://github.com/golang/go/commit/abc123",
 				"commit": map[string]interface{}{
 					"message": "go1.22.0",
 					"author": map[string]string{
-						"name": "Gopher Bot",
+						"name":  "Gopher Bot",
 						"email": "bot@golang.org",
-						"date": "2024-02-06T17:00:00Z",
+						"date":  "2024-02-06T17:00:00Z",
 					},
 				},
 			})
@@ -234,9 +233,9 @@ func TestGetTags_TagDataIntegrity(t *testing.T) {
 		Owner      string `json:"owner"`
 		Repo       string `json:"repo"`
 		TotalCount int    `json:"total_count"`
-		Tags []struct {
-			Name      string `json:"name"`
-			SHA       string `json:"sha"`
+		Tags       []struct {
+			Name       string `json:"name"`
+			SHA        string `json:"sha"`
 			AuthorName string `json:"author_name"`
 		} `json:"tags"`
 	}
@@ -285,23 +284,18 @@ func TestGetTags_MissingOwner(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Stale cache fallback
+// Stale cache key format
 // ---------------------------------------------------------------------------
 
-func TestGetTags_StaleOnGitHubDown(t *testing.T) {
-	h, _ := newTestHandler(t)
-	ctx := context.Background()
-
-	// Pre-warm the stale cache directly via the cache package.
-	mr := miniredis.RunT(t)
-	c, _ := cache.New("redis://"+mr.Addr(), 5*time.Minute)
-	_ = c.SetStale(ctx, cache.TagsKey("golang", "go"), map[string]interface{}{"stale": true})
-	_ = c
-	// The handler's internal cache already has data from the mock server;
-	// the stale path is exercised by the 404 test above triggering GetStale.
-	// This test confirms the stale key format is consistent.
+func TestGetTags_StaleKeyFormat(t *testing.T) {
+	// Confirms TagsKey produces a non-empty, consistent key used by the
+	// stale fallback path in the handler.
 	key := cache.TagsKey("golang", "go")
 	if key == "" {
 		t.Error("TagsKey must not be empty")
+	}
+	key2 := cache.TagsKey("golang", "go")
+	if key != key2 {
+		t.Errorf("TagsKey not deterministic: %q != %q", key, key2)
 	}
 }
