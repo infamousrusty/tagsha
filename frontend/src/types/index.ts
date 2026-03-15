@@ -31,3 +31,19 @@ export interface APIError {
 }
 
 export type LoadState = 'idle' | 'loading' | 'success' | 'error'
+
+/** Normalised tag shape used throughout the UI */
+export interface TagEntry {
+  name: string
+  sha?: string
+  message?: string
+  author?: string
+  date?: string
+  commitUrl?: string
+  /** Full image ref prefix, e.g. ghcr.io/org/image */
+  repo?: string
+  digest?: string
+  size?: string
+}
+
+export type Registry = 'ghcr' | 'dockerhub' | 'other'
