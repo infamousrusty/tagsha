@@ -1,0 +1,22 @@
+# CODEOWNERS
+# Owners are automatically requested for review on every PR.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global owner
+* @infamousrusty
+
+# Backend
+/backend/ @infamousrusty
+
+# Frontend
+/frontend/ @infamousrusty
+
+# CI/CD and automation
+/.github/ @infamousrusty
+
+# Infrastructure
+/infrastructure/ @infamousrusty
+
+# Documentation
+/docs/ @infamousrusty
+*.md @infamousrusty
