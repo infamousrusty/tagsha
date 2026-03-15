@@ -150,11 +150,16 @@ jobs:
           path: backend/gosec.sarif
           retention-days: 30
 
-      - name: Install Trivy
+      - name: Install Trivy via APT
         run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b "${HOME}/.local/bin" v0.61.0
-          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y wget apt-transport-https gnupg
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key \
+            | gpg --dearmor \
+            | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" \
+            | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -qq
+          sudo apt-get install -y trivy=0.61.0
 
       - name: Trivy filesystem secret scan
         run: |
@@ -223,11 +228,16 @@ jobs:
           provenance: true
           sbom: true
 
-      - name: Install Trivy
+      - name: Install Trivy via APT
         run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b "${HOME}/.local/bin" v0.61.0
-          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y wget apt-transport-https gnupg
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key \
+            | gpg --dearmor \
+            | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" \
+            | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -qq
+          sudo apt-get install -y trivy=0.61.0
 
       - name: Trivy container vulnerability scan
         run: |
