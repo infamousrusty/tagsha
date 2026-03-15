@@ -148,14 +148,27 @@ jobs:
           sarif_file: gosec.sarif
         if: always()
 
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b "${HOME}/.local/bin" v0.61.0
+          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+
       - name: Trivy filesystem secret scan
-        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.20.0
+        run: |
+          trivy fs \
+            --scanners secret \
+            --exit-code 1 \
+            --severity HIGH,CRITICAL \
+            --format sarif \
+            --output trivy-fs.sarif \
+            .
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.4
         with:
-          scan-type: fs
-          scan-ref: .
-          scanners: secret
-          exit-code: '1'
-          severity: HIGH,CRITICAL
+          sarif_file: trivy-fs.sarif
+        if: always()
 
   # ---------------------------------------------------------------------------
   # Docker — build, push to GHCR, container scan (main only)
@@ -207,15 +220,21 @@ jobs:
           provenance: true
           sbom: true
 
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b "${HOME}/.local/bin" v0.61.0
+          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+
       - name: Trivy container vulnerability scan
-        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.20.0
-        with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/tagsha-api:latest
-          format: sarif
-          output: trivy-container.sarif
-          exit-code: '1'
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
+        run: |
+          trivy image \
+            --exit-code 1 \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --format sarif \
+            --output trivy-container.sarif \
+            ghcr.io/${{ github.repository_owner }}/tagsha-api:latest
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.4
