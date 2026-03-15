@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { SearchBar } from './components/SearchBar'
 import { TagList } from './components/TagList'
 import { fetchTags, resolveQuery } from './api/client'
@@ -24,7 +24,6 @@ export default function App() {
     setState({ loadState: 'loading', response: null, cacheStatus: '', error: null })
 
     try {
-      // Resolve free-form input to owner/repo first.
       const resolved = await resolveQuery(query)
       const { data, cacheStatus } = await fetchTags(resolved.owner, resolved.repo)
 

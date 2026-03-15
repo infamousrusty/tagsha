@@ -1,18 +1,18 @@
 import { useState } from 'react'
+import type { FC } from 'react'
 
 interface Props {
   text: string
   label?: string
 }
 
-export const CopyButton: React.FC<Props> = ({ text, label = 'Copy' }) => {
+export const CopyButton: FC<Props> = ({ text, label = 'Copy' }) => {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(text)
     } catch {
-      // Fallback for non-secure contexts.
       const el = document.createElement('textarea')
       el.value = text
       el.style.position = 'absolute'

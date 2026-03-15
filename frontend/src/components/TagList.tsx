@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
+import type { FC } from 'react'
 import type { TagsResponse } from '../types'
 import { TagRow } from './TagRow'
 
@@ -7,7 +8,7 @@ interface Props {
   cacheStatus: string
 }
 
-export const TagList: React.FC<Props> = ({ response, cacheStatus }) => {
+export const TagList: FC<Props> = ({ response, cacheStatus }) => {
   const [filter, setFilter] = useState('')
 
   const filtered = useMemo(

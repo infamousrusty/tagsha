@@ -1,15 +1,16 @@
-import React, { useState, useRef } from 'react'
+import { useState, useRef } from 'react'
+import type { FC, FormEvent } from 'react'
 
 interface Props {
   onSearch: (query: string) => void
   isLoading: boolean
 }
 
-export const SearchBar: React.FC<Props> = ({ onSearch, isLoading }) => {
+export const SearchBar: FC<Props> = ({ onSearch, isLoading }) => {
   const [value, setValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     const trimmed = value.trim()
     if (trimmed) onSearch(trimmed)
