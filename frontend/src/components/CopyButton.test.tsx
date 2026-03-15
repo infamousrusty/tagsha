@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, act, cleanup } from '@testing-library/react'
 import { CopyButton } from './CopyButton'
+
+afterEach(() => { cleanup() })
 
 describe('CopyButton', () => {
   beforeEach(() => {
@@ -18,7 +20,7 @@ describe('CopyButton', () => {
 
   it('shows copied state after click', async () => {
     render(<CopyButton text="abc123def456" label="abc123" />)
-    const btn = screen.getByRole('button')
+    const btn = screen.getByRole('button', { name: /copy abc123/i })
     await act(async () => { fireEvent.click(btn) })
     expect(btn.textContent).toContain('Copied')
   })
