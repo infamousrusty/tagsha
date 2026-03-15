@@ -10,13 +10,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/infamousrusty/tagsha/internal/api"
-	"github.com/infamousrusty/tagsha/internal/cache"
-	ghclient "github.com/infamousrusty/tagsha/internal/github"
-	"github.com/infamousrusty/tagsha/internal/config"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"github.com/infamousrusty/tagsha/internal/api"
+	"github.com/infamousrusty/tagsha/internal/cache"
+	"github.com/infamousrusty/tagsha/internal/config"
+	ghclient "github.com/infamousrusty/tagsha/internal/github"
 )
 
 // version is injected at build time via -ldflags.

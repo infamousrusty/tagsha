@@ -7,22 +7,23 @@ import (
 	"net/http"
 	"time"
 
-	ghclient "github.com/infamousrusty/tagsha/internal/github"
+	"github.com/rs/zerolog/log"
+
 	"github.com/infamousrusty/tagsha/internal/cache"
+	ghclient "github.com/infamousrusty/tagsha/internal/github"
 	"github.com/infamousrusty/tagsha/internal/metrics"
 	"github.com/infamousrusty/tagsha/internal/validation"
-	"github.com/rs/zerolog/log"
 )
 
 // TagsResponse is the JSON response body for the tag listing endpoint.
 type TagsResponse struct {
-	Owner                   string         `json:"owner"`
-	Repo                    string         `json:"repo"`
-	TotalCount              int            `json:"total_count"`
-	Truncated               bool           `json:"truncated"`
-	Tags                    []ghclient.Tag `json:"tags"`
-	CachedAt                string         `json:"cached_at"`
-	GitHubRateLimitRemaining int           `json:"github_rate_limit_remaining"`
+	Owner                    string         `json:"owner"`
+	Repo                     string         `json:"repo"`
+	TotalCount               int            `json:"total_count"`
+	Truncated                bool           `json:"truncated"`
+	Tags                     []ghclient.Tag `json:"tags"`
+	CachedAt                 string         `json:"cached_at"`
+	GitHubRateLimitRemaining int            `json:"github_rate_limit_remaining"`
 }
 
 // ResolveRequest is the JSON body for the /resolve endpoint.
@@ -60,7 +61,6 @@ func (h *Handler) GetTags(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	reqID := requestIDFromCtx(ctx)
 
-	// Extract and validate path parameters.
 	owner := pathParam(r, "owner")
 	repo := pathParam(r, "repo")
 
@@ -70,7 +70,6 @@ func (h *Handler) GetTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Re-validate even though router already matched — defence in depth.
 	ident, err := validation.ParseInput(owner + "/" + repo)
 	if err != nil {
 		metrics.ErrorsTotal.WithLabelValues("validation").Inc()
@@ -80,7 +79,6 @@ func (h *Handler) GetTags(w http.ResponseWriter, r *http.Request) {
 
 	cacheKey := cache.TagsKey(ident.Owner, ident.Repo)
 
-	// Try primary cache.
 	var cached TagsResponse
 	hit, err := h.cache.Get(ctx, cacheKey, &cached)
 	if err != nil {
@@ -92,12 +90,10 @@ func (h *Handler) GetTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch from GitHub.
 	tags, rl, err := h.github.FetchAllTags(ctx, ident.Owner, ident.Repo)
 	if err != nil {
 		if errors.Is(err, ghclient.ErrNotFound) {
 			metrics.ErrorsTotal.WithLabelValues("not_found").Inc()
-			// Try stale cache before returning 404.
 			var stale TagsResponse
 			if staleHit, _ := h.cache.GetStale(ctx, cacheKey, &stale); staleHit {
 				w.Header().Set("X-Cache", "STALE")
@@ -109,7 +105,6 @@ func (h *Handler) GetTags(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, ghclient.ErrRateLimited) {
-			// Serve stale data if available.
 			var stale TagsResponse
 			if staleHit, _ := h.cache.GetStale(ctx, cacheKey, &stale); staleHit {
 				w.Header().Set("X-Cache", "STALE")
@@ -142,7 +137,6 @@ func (h *Handler) GetTags(w http.ResponseWriter, r *http.Request) {
 		GitHubRateLimitRemaining: rateLimitRemaining,
 	}
 
-	// Write to primary and stale cache.
 	if err := h.cache.Set(ctx, cacheKey, response, 0); err != nil {
 		log.Warn().Err(err).Str("request_id", reqID).Msg("cache write error")
 	}
@@ -153,7 +147,6 @@ func (h *Handler) GetTags(w http.ResponseWriter, r *http.Request) {
 }
 
 // Resolve handles POST /api/v1/resolve.
-// Parses a free-form GitHub repository identifier and redirects to the tag endpoint.
 func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	reqID := requestIDFromCtx(ctx)
@@ -208,8 +201,6 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// pathParam extracts a URL path parameter by name from the Chi context.
 func pathParam(r *http.Request, key string) string {
-	// chi.URLParam inlined to avoid a direct chi import in handler.
 	return r.PathValue(key)
 }

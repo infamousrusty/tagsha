@@ -10,7 +10,6 @@ import (
 	ghclient "github.com/infamousrusty/tagsha/internal/github"
 )
 
-// newMockGitHub creates an httptest.Server stubbing the GitHub tags + commits API.
 func newMockGitHub(t *testing.T, tags []map[string]interface{}, commits map[string]map[string]interface{}) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +20,6 @@ func newMockGitHub(t *testing.T, tags []map[string]interface{}, commits map[stri
 		case "/repos/owner/repo/tags":
 			json.NewEncoder(w).Encode(tags)
 		default:
-			// Match /repos/owner/repo/commits/{sha}
 			for sha, data := range commits {
 				if r.URL.Path == "/repos/owner/repo/commits/"+sha {
 					json.NewEncoder(w).Encode(data)
@@ -39,14 +37,14 @@ func TestFetchAllTags_EnrichedData(t *testing.T) {
 	}
 	commits := map[string]map[string]interface{}{
 		"deadbeef": {
-			"sha": "deadbeef",
+			"sha":      "deadbeef",
 			"html_url": "https://github.com/owner/repo/commit/deadbeef",
 			"commit": map[string]interface{}{
 				"message": "release v1.0.0\n\nDetailed description.",
 				"author": map[string]string{
-					"name": "Alice",
+					"name":  "Alice",
 					"email": "alice@example.com",
-					"date": "2026-01-01T00:00:00Z",
+					"date":  "2026-01-01T00:00:00Z",
 				},
 			},
 		},
@@ -76,7 +74,6 @@ func TestFetchAllTags_EnrichedData(t *testing.T) {
 	if tag.AuthorName != "Alice" {
 		t.Errorf("AuthorName = %q, want Alice", tag.AuthorName)
 	}
-	// firstLine should strip everything after \n
 	if tag.Message != "release v1.0.0" {
 		t.Errorf("Message = %q, want 'release v1.0.0'", tag.Message)
 	}
@@ -105,8 +102,6 @@ func TestFetchAllTags_Empty(t *testing.T) {
 }
 
 func TestFetchAllTags_CommitEnrichmentPartialFailure(t *testing.T) {
-	// Commit lookup returns 404 for sha 'missing' — tag should still be returned
-	// with partial data (name + SHA only), not an error.
 	tags := []map[string]interface{}{
 		{"name": "v2.0.0", "commit": map[string]string{"sha": "missing", "url": ""}},
 	}
@@ -129,19 +124,17 @@ func TestFetchAllTags_CommitEnrichmentPartialFailure(t *testing.T) {
 	if result[0].SHA != "missing" {
 		t.Errorf("SHA = %q, want missing", result[0].SHA)
 	}
-	// Enrichment fields should be empty
 	if result[0].AuthorName != "" {
 		t.Errorf("AuthorName should be empty on partial failure, got %q", result[0].AuthorName)
 	}
 }
 
 func TestFetchAllTags_Pagination(t *testing.T) {
-	// Return exactly 100 items on page 1 to trigger page 2 fetch.
 	page1 := make([]map[string]interface{}, 100)
 	for i := range page1 {
 		sha := "sha" + string(rune('a'+i%26))
 		page1[i] = map[string]interface{}{
-			"name": "v0.0." + string(rune('a'+i%26)),
+			"name":   "v0.0." + string(rune('a'+i%26)),
 			"commit": map[string]string{"sha": sha, "url": ""},
 		}
 	}
@@ -155,15 +148,14 @@ func TestFetchAllTags_Pagination(t *testing.T) {
 			if page == 1 {
 				json.NewEncoder(w).Encode(page1)
 			} else {
-				json.NewEncoder(w).Encode([]interface{}{}) // empty page 2 = done
+				json.NewEncoder(w).Encode([]interface{}{})
 			}
 		} else {
-			// Commit enrichment — return minimal data
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"sha": "x", "html_url": "",
 				"commit": map[string]interface{}{
 					"message": "x",
-					"author": map[string]string{"name": "", "email": "", "date": ""},
+					"author":  map[string]string{"name": "", "email": "", "date": ""},
 				},
 			})
 		}

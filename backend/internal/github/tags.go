@@ -33,18 +33,16 @@ type CommitDetail struct {
 
 // Tag is the enriched, resolved tag returned to callers.
 type Tag struct {
-	Name      string       `json:"name"`
-	SHA       string       `json:"sha"`
-	Message   string       `json:"message"`
-	AuthorName  string     `json:"author_name"`
-	AuthorEmail string     `json:"author_email"`
-	Date      string       `json:"date"`
-	CommitURL string       `json:"commit_url"`
+	Name        string `json:"name"`
+	SHA         string `json:"sha"`
+	Message     string `json:"message"`
+	AuthorName  string `json:"author_name"`
+	AuthorEmail string `json:"author_email"`
+	Date        string `json:"date"`
+	CommitURL   string `json:"commit_url"`
 }
 
 // GetTags fetches one page of tags for a repository.
-// It uses the lightweight tags endpoint which already contains the commit SHA,
-// avoiding an extra API call per tag for the vast majority of cases.
 func (c *Client) GetTags(ctx context.Context, owner, repo string, page, perPage int) ([]rawTag, *RateLimitInfo, error) {
 	path := fmt.Sprintf("/repos/%s/%s/tags?per_page=%d&page=%d", owner, repo, perPage, page)
 	var tags []rawTag

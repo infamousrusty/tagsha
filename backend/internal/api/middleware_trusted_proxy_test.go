@@ -7,16 +7,16 @@ import (
 
 func TestIsTrustedProxy_DockerRanges(t *testing.T) {
 	tests := []struct {
-		ip      string
-		wanted  bool
+		ip     string
+		wanted bool
 	}{
 		{"172.17.0.1", true},  // Default Docker bridge
 		{"10.10.50.1", true},  // Internal homelab range
 		{"127.0.0.1", true},   // Loopback
 		{"::1", true},          // IPv6 loopback
-		{"1.2.3.4", false},     // Public internet IP
+		{"1.2.3.4", false},    // Public internet IP
 		{"192.168.1.1", false}, // Not in default trusted CIDRs
-		{"not-an-ip", false},   // Invalid
+		{"not-an-ip", false},  // Invalid
 	}
 	for _, tt := range tests {
 		if got := isTrustedProxy(tt.ip); got != tt.wanted {
@@ -27,12 +27,7 @@ func TestIsTrustedProxy_DockerRanges(t *testing.T) {
 
 func TestIsTrustedProxy_CustomCIDR(t *testing.T) {
 	t.Setenv("TAGSHA_TRUSTED_PROXY_CIDRS", "192.168.1.0/24")
-	// Re-initialise (simulate process start with env set).
 	_ = os.Getenv("TAGSHA_TRUSTED_PROXY_CIDRS")
-	// isTrustedProxy uses the package-level slice set at init;
-	// we test the helper logic is correct using the existing init values.
-	// A full test of custom CIDRs requires a separate binary or reinit —
-	// documented as a manual verification step.
 	if isTrustedProxy("0.0.0.0") {
 		t.Error("0.0.0.0 should never be trusted")
 	}

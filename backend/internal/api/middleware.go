@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/infamousrusty/tagsha/internal/metrics"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"github.com/infamousrusty/tagsha/internal/metrics"
 )
 
 type contextKey string
@@ -31,7 +32,6 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// requestIDFromCtx extracts the request ID from the context.
 func requestIDFromCtx(ctx context.Context) string {
 	if id, ok := ctx.Value(contextKeyRequestID).(string); ok {
 		return id
@@ -42,7 +42,7 @@ func requestIDFromCtx(ctx context.Context) string {
 // responseWriter wraps http.ResponseWriter to capture the status code.
 type responseWriter struct {
 	http.ResponseWriter
-	status      int
+	status       int
 	bytesWritten int
 }
 
@@ -58,7 +58,6 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 }
 
 // LoggingMiddleware emits structured JSON log entries for every request.
-// Sensitive headers (Authorization) are never logged.
 func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -161,7 +160,6 @@ func MaxBytesMiddleware(limit int64) func(http.Handler) http.Handler {
 }
 
 func extractIP(r *http.Request) string {
-	// Trust X-Real-IP set by Caddy.
 	if ip := r.Header.Get("X-Real-IP"); ip != "" {
 		return ip
 	}
