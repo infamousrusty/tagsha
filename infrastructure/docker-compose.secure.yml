@@ -1,0 +1,23 @@
+# docker-compose.secure.yml
+# Security hardening overlay — merge on top of docker-compose.yml
+# Usage:
+#   docker compose -f infrastructure/docker-compose.yml \
+#                  -f infrastructure/docker-compose.secure.yml up -d
+
+version: '3.9'
+
+services:
+  caddy:
+    security_opt: ["no-new-privileges:true"]
+
+  api:
+    security_opt: ["no-new-privileges:true"]
+
+  redis:
+    security_opt: ["no-new-privileges:true"]
+
+  prometheus:
+    security_opt: ["no-new-privileges:true"]
+
+  grafana:
+    security_opt: ["no-new-privileges:true"]
