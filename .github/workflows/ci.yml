@@ -31,17 +31,18 @@ jobs:
           go-version: '1.22'
           cache: false
 
-      - name: go mod tidy (regenerate go.sum from proxy)
+      - name: go mod tidy
         run: go mod tidy
 
       - name: go vet
         run: go vet ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v6.5.2
+        uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8 # v6.1.1
         with:
-          version: v1.58
+          version: v1.64.8
           args: --config ../.github/golangci.yml --timeout 5m
+          working-directory: backend
 
   # ---------------------------------------------------------------------------
   # Backend — unit tests with race detector
@@ -63,7 +64,7 @@ jobs:
           go-version: '1.22'
           cache: false
 
-      - name: go mod tidy (regenerate go.sum from proxy)
+      - name: go mod tidy
         run: go mod tidy
 
       - name: Unit tests (race detector + coverage)
