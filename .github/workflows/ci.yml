@@ -111,13 +111,12 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Security — Gosec SAST, Trivy filesystem secret scan
+  # Requires on runner: gosec v2.21.4, trivy v0.61.0 (pre-installed system-wide)
   # ---------------------------------------------------------------------------
   security-scan:
     name: Security Scanning
     runs-on: [self-hosted, linux, x64]
     needs: [backend-test]
-    env:
-      DEBIAN_FRONTEND: noninteractive
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -133,12 +132,6 @@ jobs:
           go mod tidy
           go mod download
 
-      - name: Install Gosec
-        run: |
-          curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh \
-            | sh -s -- -b "${HOME}/.local/bin" v2.21.4
-          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
-
       - name: Gosec SAST
         working-directory: backend
         run: |
@@ -151,12 +144,6 @@ jobs:
           name: gosec-sarif
           path: backend/gosec.sarif
           retention-days: 30
-
-      - name: Install Trivy
-        run: |
-          wget -qO /tmp/trivy.deb \
-            https://aquasecurity.github.io/trivy-repo/deb/pool/main/t/trivy/trivy_0.61.0_amd64.deb
-          sudo apt-get install -y /tmp/trivy.deb
 
       - name: Trivy filesystem secret scan
         run: |
@@ -178,14 +165,13 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Docker — build, push to GHCR, container scan (main only)
+  # Requires on runner: trivy v0.61.0 (pre-installed system-wide)
   # ---------------------------------------------------------------------------
   docker-build:
     name: Docker Build and Push
     runs-on: [self-hosted, linux, x64]
     needs: [backend-test, frontend-test, security-scan]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    env:
-      DEBIAN_FRONTEND: noninteractive
     permissions:
       contents: read
       packages: write
@@ -226,12 +212,6 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: true
           sbom: true
-
-      - name: Install Trivy
-        run: |
-          wget -qO /tmp/trivy.deb \
-            https://aquasecurity.github.io/trivy-repo/deb/pool/main/t/trivy/trivy_0.61.0_amd64.deb
-          sudo apt-get install -y /tmp/trivy.deb
 
       - name: Trivy container vulnerability scan
         run: |
