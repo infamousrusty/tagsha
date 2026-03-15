@@ -103,13 +103,13 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 // RateLimiter implements a sliding-window rate limiter backed by Redis.
 type RateLimiter struct {
 	client *redis.Client
-	rpm    int
+	rpm    int64
 	log    zerolog.Logger
 }
 
 // NewRateLimiter creates a RateLimiter.
 func NewRateLimiter(client *redis.Client, rpm int) *RateLimiter {
-	return &RateLimiter{client: client, rpm: rpm, log: log.With().Str("component", "rate_limiter").Logger()}
+	return &RateLimiter{client: client, rpm: int64(rpm), log: log.With().Str("component", "rate_limiter").Logger()}
 }
 
 // Middleware enforces per-IP rate limiting.
@@ -119,20 +119,22 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		key := "rl:" + ip
 		ctx := r.Context()
 
+		// count is int64 (Redis INCR return type) — kept as int64 throughout
+		// to avoid any integer conversion.
 		count, err := rl.client.Incr(ctx, key).Result()
 		if err == nil && count == 1 {
 			_ = rl.client.Expire(ctx, key, time.Minute).Err()
 		}
 
-		remaining := rl.rpm - int(count)
+		remaining := rl.rpm - count
 		if remaining < 0 {
 			remaining = 0
 		}
 
-		w.Header().Set("X-RateLimit-Limit", strconv.Itoa(rl.rpm))
-		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
+		w.Header().Set("X-RateLimit-Limit", strconv.FormatInt(rl.rpm, 10))
+		w.Header().Set("X-RateLimit-Remaining", strconv.FormatInt(remaining, 10))
 
-		if int(count) > rl.rpm {
+		if count > rl.rpm {
 			w.Header().Set("Retry-After", "60")
 			metrics.RateLimitHitsTotal.WithLabelValues(r.URL.Path).Inc()
 			rl.log.Warn().
@@ -140,7 +142,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 				Str("path", r.URL.Path).
 				Msg("rate limit exceeded")
 			writeError(w, http.StatusTooManyRequests, ErrRateLimited,
-				"Rate limit exceeded. Maximum "+strconv.Itoa(rl.rpm)+" requests per minute.",
+				"Rate limit exceeded. Maximum "+strconv.FormatInt(rl.rpm, 10)+" requests per minute.",
 				requestIDFromCtx(ctx))
 			return
 		}
@@ -160,7 +162,7 @@ func MaxBytesMiddleware(limit int64) func(http.Handler) http.Handler {
 }
 
 func extractIP(r *http.Request) string {
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+	if ip := r.Header.Get("X-Real-IP"); ip != "" && isTrustedProxy(r.RemoteAddr) {
 		return ip
 	}
 	addr := r.RemoteAddr

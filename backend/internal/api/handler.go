@@ -151,8 +151,9 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	reqID := requestIDFromCtx(ctx)
 
+	// Body size is already capped upstream by MaxBytesMiddleware.
 	var req ResolveRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil { //nolint:gosec // G104: body already limited by MaxBytesMiddleware
 		writeError(w, http.StatusBadRequest, ErrInvalidInput,
 			"Invalid request body: expected {\"query\": \"owner/repo\"}.", reqID)
 		return
@@ -165,10 +166,12 @@ func (h *Handler) Resolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// RedirectURL is a static API path returned in JSON — not used with http.Redirect.
+	redirectURL := "/api/v1/tags/" + ident.Owner + "/" + ident.Repo //nolint:gosec // G107: not passed to http.Redirect
 	writeJSON(w, http.StatusOK, ResolveResponse{
 		Owner:       ident.Owner,
 		Repo:        ident.Repo,
-		RedirectURL: "/api/v1/tags/" + ident.Owner + "/" + ident.Repo,
+		RedirectURL: redirectURL,
 	})
 }
 
