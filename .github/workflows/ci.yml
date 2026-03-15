@@ -111,7 +111,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Security — Gosec SAST, Trivy filesystem secret scan
-  # Requires on runner: gosec v2.21.4, trivy v0.61.0 (pre-installed system-wide)
+  # Requires on runner: trivy v0.69.3, gosec v2.21.4 (pre-installed at /usr/bin)
   # ---------------------------------------------------------------------------
   security-scan:
     name: Security Scanning
@@ -165,7 +165,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Docker — build, push to GHCR, container scan (main only)
-  # Requires on runner: trivy v0.61.0 (pre-installed system-wide)
+  # Requires on runner: trivy v0.69.3 (pre-installed at /usr/bin)
   # ---------------------------------------------------------------------------
   docker-build:
     name: Docker Build and Push
