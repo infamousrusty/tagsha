@@ -70,11 +70,13 @@ func getEnv(key, defaultVal string) string {
 }
 
 // readSecret reads a secret from an env var first, then a Docker secret file.
+// secretPath is a hardcoded constant (/run/secrets/github_token) — not user input.
 func readSecret(envKey, secretPath string) string {
 	if v := os.Getenv(envKey); v != "" {
 		return strings.TrimSpace(v)
 	}
-	if data, err := os.ReadFile(secretPath); err == nil {
+	data, err := os.ReadFile(secretPath) /* #nosec G304 -- path is a hardcoded Docker secrets mount, not user-controlled */
+	if err == nil {
 		return strings.TrimSpace(string(data))
 	}
 	return ""

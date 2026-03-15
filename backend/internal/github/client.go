@@ -54,7 +54,9 @@ func New(token, baseURL string) *Client {
 
 // doRequest executes a GET request to the GitHub API and decodes the JSON response.
 func (c *Client) doRequest(ctx context.Context, path string, result interface{}) (*RateLimitInfo, error) {
-	url := c.baseURL + path
+	// baseURL is hardcoded to https://api.github.com in config.Load().
+	// path is constructed internally from validated owner/repo inputs.
+	url := c.baseURL + path /* #nosec G107 -- baseURL is https://api.github.com, path is internally constructed */
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
