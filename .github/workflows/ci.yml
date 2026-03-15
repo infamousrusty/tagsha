@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-# Minimal permissions by default; jobs override where needed.
 permissions:
   contents: read
   security-events: write
@@ -14,7 +13,7 @@ permissions:
 jobs:
 
   # ---------------------------------------------------------------------------
-  # Backend — lint, vet, unit tests
+  # Backend — lint then test (separate jobs so lint failures surface instantly)
   # ---------------------------------------------------------------------------
   backend-lint:
     name: Backend Lint
@@ -26,7 +25,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Set up Go
+      - name: Set up Go 1.22
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version: '1.22'
@@ -59,7 +58,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Set up Go
+      - name: Set up Go 1.22
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version: '1.22'
@@ -95,7 +94,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Set up Node
+      - name: Set up Node 20
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
@@ -118,7 +117,7 @@ jobs:
         run: npm run build
 
   # ---------------------------------------------------------------------------
-  # Security — SAST (Gosec), secret scan (Trivy), dependency review
+  # Security — Gosec SAST, Trivy filesystem secret scan
   # ---------------------------------------------------------------------------
   security-scan:
     name: Security Scanning
@@ -131,7 +130,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Set up Go
+      - name: Set up Go 1.22
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version: '1.22'
@@ -157,7 +156,7 @@ jobs:
           severity: HIGH,CRITICAL
 
   # ---------------------------------------------------------------------------
-  # Docker — build, push to GHCR, container vulnerability scan
+  # Docker — build, push to GHCR, container vulnerability scan (main only)
   # ---------------------------------------------------------------------------
   docker-build:
     name: Docker Build and Push

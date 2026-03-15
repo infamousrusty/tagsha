@@ -1,5 +1,5 @@
-github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302 h1:uvdcJ8P8fQGE+Vmzx5sQSIUPSxFwpX9sGLJTUVHMUJo=
-github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302/go.mod h1:SGnFV6hVsYE877CKEZ6tDNTjaSXYW8lF4t/SnF4EMqA=
+github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302 h1:uvdUDbHQHO85qeSydJtItA4T55Pw6BtAejd0APRJOCE=
+github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302/go.mod h1:SGnFV6hVsYE877CKEZ6tDNTjaSXYUk6QqoIK6PrAtcc=
 github.com/alicebob/miniredis/v2 v2.32.1 h1:yBHoLpsyjupjz3NL3MhKyFMs9WqI2KKLT5znxeABHog=
 github.com/alicebob/miniredis/v2 v2.32.1/go.mod h1:XNDnh4A83krCioVFxFNFOhPGjberMW8rgsX41m6MZQM=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
