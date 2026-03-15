@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react'
+import { useRef, useCallback, useState, useEffect } from 'react'
 import type { Registry } from '../types'
 import type { Toast } from '../App'
 
@@ -40,33 +40,27 @@ export function SearchBar({ onSearch, isLoading, addToast }: Props) {
   const [registry, setRegistry] = useState<Registry>('ghcr')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Global `/` shortcut to focus search
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSubmit(e as unknown as React.FormEvent)
+  // Register global `/` shortcut to focus the search input
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+        e.preventDefault()
+        inputRef.current?.focus()
+      }
     }
-  }, [value, isLoading]) // eslint-disable-line
-
-  // Register `/` shortcut
-  const handleGlobalKey = useCallback((e: KeyboardEvent) => {
-    if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
-      e.preventDefault()
-      inputRef.current?.focus()
-    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  // Mount/unmount global listener
-  const refCallback = useCallback((el: HTMLInputElement | null) => {
-    ;(inputRef as React.MutableRefObject<HTMLInputElement | null>).current = el
-    if (el) window.addEventListener('keydown', handleGlobalKey)
-    else window.removeEventListener('keydown', handleGlobalKey)
-  }, [handleGlobalKey])
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault()
     const trimmed = value.trim()
     if (!trimmed) { addToast('Please enter an image reference', 'error'); return }
     onSearch(trimmed)
+  }, [value, onSearch, addToast])
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') handleSubmit(e as unknown as React.FormEvent)
   }
 
   const fillExample = (ex: string) => {
@@ -101,7 +95,7 @@ export function SearchBar({ onSearch, isLoading, addToast }: Props) {
           <label htmlFor="image-search" className="sr-only">Image reference</label>
           <input
             id="image-search"
-            ref={refCallback}
+            ref={inputRef}
             className="search-input"
             type="text"
             value={value}
