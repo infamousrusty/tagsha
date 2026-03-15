@@ -129,13 +129,16 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: go mod tidy
-        run: cd backend && go mod tidy
+      - name: go mod tidy and download
+        run: |
+          cd backend
+          go mod tidy
+          go mod download
 
       - name: Install Gosec
         run: |
           curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh \
-            | sh -s -- -b "${HOME}/.local/bin" v2.19.0
+            | sh -s -- -b "${HOME}/.local/bin" v2.21.4
           echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
 
       - name: Gosec SAST
