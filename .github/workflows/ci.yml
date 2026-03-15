@@ -164,8 +164,8 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Docker — build, push to GHCR, container scan (main only)
-  # Uses 'docker' driver to avoid Docker Hub rate limits / outages during
-  # BuildKit container initialisation.
+  # Pre-pulls base images from Docker Hub before Buildx runs so the
+  # docker driver can use the local cache and avoid Hub during the build.
   # ---------------------------------------------------------------------------
   docker-build:
     name: Docker Build and Push
@@ -179,6 +179,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Pre-pull base images
+        run: |
+          docker pull golang:1.22-alpine || true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
