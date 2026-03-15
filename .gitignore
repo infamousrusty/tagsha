@@ -1,0 +1,42 @@
+# Binaries
+backend/tagsha-api
+backend/healthcheck
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+backend/vendor/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Environment files (never commit secrets)
+.env
+.env.production
+.env.staging
+secrets/
+!secrets/.gitkeep
+
+# Docker
+*.tar
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+backend/coverage.out
+frontend/coverage/
+
+# Logs
+*.log
