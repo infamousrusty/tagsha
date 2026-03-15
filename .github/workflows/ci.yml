@@ -116,6 +116,8 @@ jobs:
     name: Security Scanning
     runs-on: [self-hosted, linux, x64]
     needs: [backend-test]
+    env:
+      DEBIAN_FRONTEND: noninteractive
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -152,12 +154,14 @@ jobs:
 
       - name: Install Trivy via APT
         run: |
-          sudo apt-get install -y wget apt-transport-https gnupg
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key \
-            | gpg --dearmor \
-            | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          # Fetch key to a runner-owned temp file, then sudo cp — avoids sudo in pipeline
+          wget -qO /tmp/trivy.gpg.asc https://aquasecurity.github.io/trivy-repo/deb/public.key
+          gpg --dearmor < /tmp/trivy.gpg.asc > /tmp/trivy.gpg
+          sudo cp /tmp/trivy.gpg /usr/share/keyrings/trivy.gpg
+          # Write sources entry to temp file, then sudo cp
           echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" \
-            | sudo tee /etc/apt/sources.list.d/trivy.list
+            > /tmp/trivy.list
+          sudo cp /tmp/trivy.list /etc/apt/sources.list.d/trivy.list
           sudo apt-get update -qq
           sudo apt-get install -y trivy=0.61.0
 
@@ -187,6 +191,8 @@ jobs:
     runs-on: [self-hosted, linux, x64]
     needs: [backend-test, frontend-test, security-scan]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    env:
+      DEBIAN_FRONTEND: noninteractive
     permissions:
       contents: read
       packages: write
@@ -230,12 +236,12 @@ jobs:
 
       - name: Install Trivy via APT
         run: |
-          sudo apt-get install -y wget apt-transport-https gnupg
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key \
-            | gpg --dearmor \
-            | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          wget -qO /tmp/trivy.gpg.asc https://aquasecurity.github.io/trivy-repo/deb/public.key
+          gpg --dearmor < /tmp/trivy.gpg.asc > /tmp/trivy.gpg
+          sudo cp /tmp/trivy.gpg /usr/share/keyrings/trivy.gpg
           echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" \
-            | sudo tee /etc/apt/sources.list.d/trivy.list
+            > /tmp/trivy.list
+          sudo cp /tmp/trivy.list /etc/apt/sources.list.d/trivy.list
           sudo apt-get update -qq
           sudo apt-get install -y trivy=0.61.0
 
