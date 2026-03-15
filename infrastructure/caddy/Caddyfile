@@ -1,0 +1,47 @@
+{
+    email admin@yourdomain.com
+    admin off
+}
+
+tagsha.yourdomain.com {
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
+        -Server
+    }
+
+    log {
+        output file /logs/access.log { roll_size 50mb; roll_keep 5 }
+        format json
+    }
+
+    handle /health {
+        reverse_proxy api:8080 {
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    handle /api/* {
+        reverse_proxy api:8080 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            health_uri /health
+            health_interval 15s
+        }
+    }
+
+    handle /grafana/* {
+        reverse_proxy grafana:3000
+    }
+
+    handle {
+        root * /srv/frontend
+        try_files {path} /index.html
+        file_server
+        encode gzip zstd
+    }
+}

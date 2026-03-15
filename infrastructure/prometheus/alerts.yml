@@ -1,0 +1,41 @@
+groups:
+  - name: tagsha
+    rules:
+
+      - alert: HighErrorRate
+        expr: |
+          rate(tagsha_requests_total{status=~"5.."}[5m])
+          / rate(tagsha_requests_total[5m]) > 0.1
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: TagSha error rate above 10 percent
+
+      - alert: GitHubRateLimitLow
+        expr: tagsha_github_rate_limit_remaining < 100
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: GitHub API rate limit nearly exhausted
+
+      - alert: GitHubRateLimitExhausted
+        expr: tagsha_github_rate_limit_remaining == 0
+        for: 30s
+        labels: { severity: critical }
+        annotations:
+          summary: GitHub API rate limit exhausted
+
+      - alert: HighP99Latency
+        expr: |
+          histogram_quantile(0.99, rate(tagsha_request_duration_seconds_bucket[5m])) > 3.0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: P99 request latency exceeds 3 seconds
+
+      - alert: RateLimitHitsHigh
+        expr: rate(tagsha_rate_limit_hits_total[5m]) > 10
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: High rate of rate-limit rejections

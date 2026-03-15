@@ -1,0 +1,170 @@
+# TagSha Production Docker Compose Stack
+# Prerequisites:
+#   1. Copy .env.example to .env
+#   2. echo 'ghp_...' > secrets/github_token
+#   3. echo 'strongpassword' > secrets/grafana_admin_password
+#   4. docker compose -f infrastructure/docker-compose.yml up -d
+
+version: '3.9'
+
+services:
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../frontend/dist:/srv/frontend:ro
+      - caddy-data:/data
+      - caddy-config:/config
+      - caddy-logs:/logs
+    networks:
+      - public
+      - internal
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    read_only: true
+    tmpfs: [/tmp]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 128M }
+
+  api:
+    image: ghcr.io/infamousrusty/tagsha-api:${VERSION:-latest}
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${VERSION:-dev}
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      TAGSHA_PORT: "8080"
+      TAGSHA_ENV: production
+      TAGSHA_LOG_LEVEL: "${TAGSHA_LOG_LEVEL:-info}"
+      TAGSHA_REDIS_URL: redis://redis:6379/0
+      TAGSHA_CACHE_TTL_SECONDS: "${TAGSHA_CACHE_TTL_SECONDS:-300}"
+      TAGSHA_RATE_LIMIT_RPM: "${TAGSHA_RATE_LIMIT_RPM:-50}"
+      TAGSHA_MAX_PAGES: "${TAGSHA_MAX_PAGES:-10}"
+    secrets: [github_token]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+    user: "1000:1000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits: { cpus: '1.0', memory: 256M }
+
+  redis:
+    image: redis:7.2.4-alpine
+    restart: unless-stopped
+    networks: [internal]
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-data:/data
+    command: redis-server /usr/local/etc/redis/redis.conf
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: [/tmp]
+    user: "999:999"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 128M }
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    restart: unless-stopped
+    networks: [internal]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    user: "65534:65534"
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 512M }
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    restart: unless-stopped
+    networks: [internal]
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "https://${TAGSHA_DOMAIN:-localhost}/grafana"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    secrets: [grafana_admin_password]
+    user: "472:472"
+    depends_on: [prometheus]
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: 256M }
+
+networks:
+  public:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+
+volumes:
+  caddy-data:
+  caddy-config:
+  caddy-logs:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+
+secrets:
+  github_token:
+    file: ../secrets/github_token
+  grafana_admin_password:
+    file: ../secrets/grafana_admin_password

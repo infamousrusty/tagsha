@@ -1,0 +1,24 @@
+# TagSha Development Override
+# Usage: docker compose -f infrastructure/docker-compose.yml -f infrastructure/docker-compose.dev.yml up
+
+version: '3.9'
+
+services:
+  api:
+    environment:
+      TAGSHA_ENV: development
+      TAGSHA_LOG_LEVEL: debug
+    ports:
+      - "8080:8080"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  prometheus:
+    ports:
+      - "9090:9090"
+
+  grafana:
+    ports:
+      - "3000:3000"
