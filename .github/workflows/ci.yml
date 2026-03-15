@@ -13,7 +13,7 @@ permissions:
 jobs:
 
   # ---------------------------------------------------------------------------
-  # Backend — lint then test (separate jobs so lint failures surface instantly)
+  # Backend — tidy, lint, vet
   # ---------------------------------------------------------------------------
   backend-lint:
     name: Backend Lint
@@ -29,14 +29,10 @@ jobs:
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version: '1.22'
-          cache: true
-          cache-dependency-path: backend/go.sum
+          cache: false
 
-      - name: Download modules
-        run: go mod download
-
-      - name: Verify module checksums
-        run: go mod verify
+      - name: go mod tidy (regenerate go.sum from proxy)
+        run: go mod tidy
 
       - name: go vet
         run: go vet ./...
@@ -47,6 +43,9 @@ jobs:
           version: v1.58
           args: --config ../.github/golangci.yml --timeout 5m
 
+  # ---------------------------------------------------------------------------
+  # Backend — unit tests with race detector
+  # ---------------------------------------------------------------------------
   backend-test:
     name: Backend Tests
     runs-on: ubuntu-latest
@@ -62,14 +61,10 @@ jobs:
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version: '1.22'
-          cache: true
-          cache-dependency-path: backend/go.sum
+          cache: false
 
-      - name: Download modules
-        run: go mod download
-
-      - name: Verify module checksums
-        run: go mod verify
+      - name: go mod tidy (regenerate go.sum from proxy)
+        run: go mod tidy
 
       - name: Unit tests (race detector + coverage)
         run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
@@ -135,6 +130,9 @@ jobs:
         with:
           go-version: '1.22'
 
+      - name: go mod tidy
+        run: cd backend && go mod tidy
+
       - name: Gosec SAST
         uses: securego/gosec@6fbd381238e97e1d1f3358f0d6d65de78dcf9245 # v2.19.0
         with:
@@ -156,7 +154,7 @@ jobs:
           severity: HIGH,CRITICAL
 
   # ---------------------------------------------------------------------------
-  # Docker — build, push to GHCR, container vulnerability scan (main only)
+  # Docker — build, push to GHCR, container scan (main only)
   # ---------------------------------------------------------------------------
   docker-build:
     name: Docker Build and Push

@@ -11,8 +11,8 @@ require (
 )
 
 require (
-	github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302 // indirect
-	github.com/alicebob/miniredis/v2 v2.33.0 // test
+	github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302
+	github.com/alicebob/miniredis/v2 v2.33.0
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bsm/redislock v0.9.4 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
