@@ -1,7 +1,7 @@
 github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302 h1:uvdUDbHQHO85qeSydJtItA4T55Pw6BtAejd0APRJOCE=
 github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302/go.mod h1:SGnFV6hVsYE877CKEZ6tDNTjaSXYUk6QqoIK6PrAtcc=
-github.com/alicebob/miniredis/v2 v2.32.1 h1:yBHoLpsyjupjz3NL3MhKyFMs9WqI2KKLT5znxeABHog=
-github.com/alicebob/miniredis/v2 v2.32.1/go.mod h1:XNDnh4A83krCioVFxFNFOhPGjberMW8rgsX41m6MZQM=
+github.com/alicebob/miniredis/v2 v2.33.0 h1:uvTF0EDeu9RLnUEG27Db5I68ESoIxTiXbNUiji6lZrA=
+github.com/alicebob/miniredis/v2 v2.33.0/go.mod h1:MhP4a3EU7aENRi9aO+tHfTBZicLqQevyi/DJpoj6mi0=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/bsm/redislock v0.9.4 h1:X/GqznSQBnJyqHfkExKZvKZoD5el9QBX0MxSRDEaRuI=
@@ -31,7 +31,7 @@ github.com/redis/go-redis/v9 v9.5.5/go.mod h1:LqRSGkMZigBzT3UYkMHa8b8p/EtKerFXYM
 github.com/rs/zerolog v1.32.0 h1:keLypqEpBKd2//PLKYj6OXA1GZy3i5Z5By8ZSqCban4=
 github.com/rs/zerolog v1.32.0/go.mod h1:/7mN4D5sKwJLZQ2b/znpjC3/GQWY/xaDbZyvlijf8a4=
 github.com/yuin/gopher-lua v1.1.1 h1:kYKnWBjvbNP4XLT3+bPEwAXJx262OhaHDWDVOPjL46M=
-github.com/yuin/gopher-lua v1.1.1/go.mod h1:GBR0iDaNXjAgGg9zfkuf9tGNMnFlKlBTiRKGE3KtRTM=
+github.com/yuin/gopher-lua v1.1.1/go.mod h1:GBR0iDaNXjAgGg9zfCvksxSRnQx76gclCIb7kdAd1Pw=
 golang.org/x/sys v0.21.0 h1:rF+pMkSAoBkpJi7BPCqDPgXlyLL/mHJqGJWcm8JLMMU=
 golang.org/x/sys v0.21.0/go.mod h1:/VUhepiaJMbufDG6MoFn4/3X+7k+Z3Bq5YrNHNVBYno=
 google.golang.org/protobuf v1.34.1 h1:9ddQBjfCyZPOHPUiPxpYESBLc+T8P3E+Vo4IbKZgFWg=
