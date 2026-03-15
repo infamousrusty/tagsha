@@ -1,0 +1,56 @@
+name: Bug Report
+description: Report a bug in TagSha
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug. Please fill in as much detail as possible.
+        **Do not report security vulnerabilities here** — use [GitHub Security Advisories](https://github.com/infamousrusty/tagsha/security/advisories/new) instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: TagSha Version
+      placeholder: e.g. v1.0.0 or SHA
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      placeholder: A clear description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Call `POST /api/v1/resolve` with `{"query": "..."}`
+        2. Observe response...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste any structured log output (remove sensitive data)
+      render: json
