@@ -10,13 +10,13 @@ func TestIsTrustedProxy_DockerRanges(t *testing.T) {
 		ip     string
 		wanted bool
 	}{
-		{"172.17.0.1", true},  // Default Docker bridge
-		{"10.10.50.1", true},  // Internal homelab range
-		{"127.0.0.1", true},   // Loopback
-		{"::1", true},          // IPv6 loopback
-		{"1.2.3.4", false},    // Public internet IP
-		{"192.168.1.1", false}, // Not in default trusted CIDRs
-		{"not-an-ip", false},  // Invalid
+		{"172.17.0.1", true},
+		{"10.10.50.1", true},
+		{"127.0.0.1", true},
+		{"::1", true},
+		{"1.2.3.4", false},
+		{"192.168.1.1", false},
+		{"not-an-ip", false},
 	}
 	for _, tt := range tests {
 		if got := isTrustedProxy(tt.ip); got != tt.wanted {
