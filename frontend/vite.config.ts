@@ -16,15 +16,18 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: 'dist',
-    sourcemap: false,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-        },
-      },
-    },
+        advancedChunks: {
+          groups: [
+            {
+              name: 'vendor',
+              test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/
+            }
+          ]
+        }
+      }
+    }
   },
   test: {
     environment: 'jsdom',
