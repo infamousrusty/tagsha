@@ -19,6 +19,9 @@ linters:
     - unparam
 
   settings:
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
     gocyclo:
       min-complexity: 20
     gosec:
