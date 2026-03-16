@@ -186,6 +186,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      outputs:
+        version: ${{ steps.release.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -262,17 +264,57 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Compute Docker tags
+        id: compute-tags
+        run: |
+          TAGS=""
+          
+          # Branch/PR ref
+          if [[ "${{ github.ref }}" == refs/heads/* ]]; then
+            TAGS+="type=ref,event=branch,"
+          elif [[ "${{ github.ref }}" == refs/pull/* ]]; then
+            TAGS+="type=ref,event=pr,"
+          fi
+          
+          # SHA
+          TAGS+="type=sha,prefix=sha-,"
+          
+          # Latest on main
+          if [[ "${{ github.ref }}" == refs/heads/main ]]; then
+            TAGS+="type=raw,value=latest,"
+          fi
+          
+          # Release version or dev
+          if [[ "${{ needs.release.outputs.version }}" != "" ]]; then
+            VERSION="${{ needs.release.outputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/heads/main || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="dev"
+          else
+            VERSION="sha-${{ github.sha_short }}"
+          fi
+          TAGS+="type=raw,value=$VERSION"
+          
+          echo "tags<<EOF" >> $GITHUB_OUTPUT
+          echo "$TAGS" >> $GITHUB_OUTPUT
+          echo "version<<EOF" >> $GITHUB_OUTPUT
+          echo "$VERSION" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/tagsha-api
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ needs.release.outputs.version || 'dev' }},enable={{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+          tags: ${{ steps.compute-tags.outputs.tags }}
+          flavor: |
+            latest=auto
 
       - name: Build and push
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
@@ -281,12 +323,13 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=${{ needs.release.outputs.version || github.sha }}
+          build-args: |
+            VERSION=${{ steps.compute-tags.outputs.version }}
 
       - name: Trivy container vulnerability scan
         if: always()
         run: |
-          IMAGE=ghcr.io/${{ github.repository_owner }}/tagsha-api:${{ steps.meta.outputs.tags }}
+          IMAGE=${{ steps.meta.outputs.tags }}
           trivy image \
             --exit-code 1 \
             --severity HIGH,CRITICAL \
