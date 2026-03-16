@@ -1,18 +1,31 @@
-name: CI
+name: CI/CD
 
 on:
   push:
     branches: [main, develop]
+    tags: ['v*.*.*']
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'SemVer bump type'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: read
+  packages: write
+  id-token: write
 
 jobs:
-
   # ---------------------------------------------------------------------------
-  # Backend — tidy, lint, vet
+  # Backend — tidy, lint, vet (unchanged)
   # ---------------------------------------------------------------------------
   backend-lint:
     name: Backend Lint
@@ -44,7 +57,7 @@ jobs:
           working-directory: backend
 
   # ---------------------------------------------------------------------------
-  # Backend — unit tests with race detector
+  # Backend — unit tests with race detector (unchanged)
   # ---------------------------------------------------------------------------
   backend-test:
     name: Backend Tests
@@ -77,7 +90,7 @@ jobs:
         continue-on-error: true
 
   # ---------------------------------------------------------------------------
-  # Frontend — type-check, lint, test, build
+  # Frontend — type-check, lint, test, build (unchanged)
   # ---------------------------------------------------------------------------
   frontend-test:
     name: Frontend Tests
@@ -110,7 +123,7 @@ jobs:
         run: npm run build
 
   # ---------------------------------------------------------------------------
-  # Security — Gosec SAST, Trivy filesystem secret scan
+  # Security — Gosec SAST, Trivy filesystem secret scan (unchanged)
   # ---------------------------------------------------------------------------
   security-scan:
     name: Security Scanning
@@ -163,15 +176,68 @@ jobs:
           retention-days: 30
 
   # ---------------------------------------------------------------------------
-  # Docker — build, push to GHCR, container scan (main only)
-  # Pre-pulls base images from Docker Hub before Buildx runs so the
-  # docker driver can use the local cache and avoid Hub during the build.
+  # Semantic Versioning & Release (on main push/manual)
+  # ---------------------------------------------------------------------------
+  release:
+    name: Semantic Release
+    runs-on: [self-hosted, linux, x64]
+    needs: [backend-test, frontend-test, security-scan]
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0  # For versioning
+
+      - name: Semantic Release
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_TYPE: ${{ github.event.inputs.version_type || 'patch' }}
+        run: |
+          # Fetch latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')
+          echo "Latest tag: $LATEST_TAG"
+
+          # Parse MAJOR.MINOR.PATCH
+          MAJOR=$(echo $LATEST_TAG | cut -d. -f1 | sed 's/v//')
+          MINOR=$(echo $LATEST_TAG | cut -d. -f2)
+          PATCH=$(echo $LATEST_TAG | cut -d. -f3)
+
+          # Bump based on input or default
+          if [ "$VERSION_TYPE" = "major" ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif [ "$VERSION_TYPE" = "minor" ]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else  # patch
+            PATCH=$((PATCH + 1))
+          fi
+
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: $NEW_VERSION"
+
+          # Tag & push
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag $NEW_VERSION
+          git push origin $NEW_VERSION
+
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+  # ---------------------------------------------------------------------------
+  # Docker — build, push to GHCR, container scan (PR/main/develop/manual)
   # ---------------------------------------------------------------------------
   docker-build:
     name: Docker Build and Push
     runs-on: [self-hosted, linux, x64]
-    needs: [backend-test, frontend-test, security-scan]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [backend-test, frontend-test, security-scan, release]
     permissions:
       contents: read
       packages: write
@@ -203,32 +269,35 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/tagsha-api
           tags: |
             type=ref,event=branch
+            type=ref,event=pr
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ needs.release.outputs.version || 'dev' }},enable={{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
 
       - name: Build and push
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           context: backend
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=${{ github.sha }}
-          provenance: false
+          build-args: VERSION=${{ needs.release.outputs.version || github.sha }}
 
       - name: Trivy container vulnerability scan
+        if: always()
         run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/tagsha-api:${{ steps.meta.outputs.tags }}
           trivy image \
             --exit-code 1 \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
             --format sarif \
             --output trivy-container.sarif \
-            ghcr.io/${{ github.repository_owner }}/tagsha-api:latest
+            $IMAGE
 
       - name: Upload Trivy container SARIF artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: trivy-container-sarif
           path: trivy-container.sarif
