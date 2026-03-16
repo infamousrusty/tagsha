@@ -15,16 +15,8 @@ export default [
         ecmaVersion: 'latest',
         sourceType: 'module',
         project: './tsconfig.json'
-      }
-    },
-    plugins: {
-      'react-hooks': reactHooks,
-      '@typescript-eslint': tsEslint
-    },
-    rules: {
-      'react-hooks/rules-of-hooks': 'error',
-      'react-hooks/exhaustive-deps': 'warn',
-      ...tsEslint.configs.recommended.rules,
+      },
+
       globals: {
         window: 'readonly',
         document: 'readonly',
@@ -35,6 +27,15 @@ export default [
         setTimeout: 'readonly',
         clearTimeout: 'readonly'
       }
+    },
+    plugins: {
+      'react-hooks': reactHooks,
+      '@typescript-eslint': tsEslint
+    },
+    rules: {
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+      ...tsEslint.configs.recommended.rules
     }
   }
 ];
