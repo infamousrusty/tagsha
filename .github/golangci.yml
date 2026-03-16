@@ -1,4 +1,5 @@
-version: "2"
+# golangci-lint v1 configuration
+# https://golangci-lint.run/usage/configuration/
 
 run:
   timeout: 5m
@@ -19,25 +20,20 @@ linters:
     - misspell
     - unconvert
     - unparam
-
-  settings:
-    gocyclo:
-      min-complexity: 20
-    gosec:
-      severity: medium
-      confidence: medium
-      excludes:
-        - G104
-
-  exclusions:
-    rules:
-      - path: _test.go
-        linters: [errcheck, gosec, unparam]
-
-formatters:
-  enable:
     - gofmt
 
+linters-settings:
+  gocyclo:
+    min-complexity: 20
+  gosec:
+    severity: medium
+    confidence: medium
+    excludes:
+      - G104
+
 issues:
+  exclude-rules:
+    - path: _test\.go
+      linters: [errcheck, gosec, unparam]
   max-issues-per-linter: 50
   max-same-issues: 10
