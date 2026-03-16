@@ -16,7 +16,6 @@ export default [
         sourceType: 'module',
         project: './tsconfig.json'
       },
-
       globals: {
         window: 'readonly',
         document: 'readonly',
@@ -25,7 +24,10 @@ export default [
         navigator: 'readonly',
         fetch: 'readonly',
         setTimeout: 'readonly',
-        clearTimeout: 'readonly'
+        clearTimeout: 'readonly',
+        global: 'readonly',
+        React: 'readonly',
+        JSX: 'readonly'
       }
     },
     plugins: {
