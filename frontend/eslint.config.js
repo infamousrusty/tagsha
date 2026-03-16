@@ -1,7 +1,7 @@
 import js from '@eslint/js';
 import reactHooks from 'eslint-plugin-react-hooks';
-import typescriptEslint from '@typescript-eslint/eslint-plugin';
-import typescriptParser from '@typescript-eslint/parser';
+import tsEslint from '@typescript-eslint/eslint-plugin';
+import tsParser from '@typescript-eslint/parser';
 
 export default [
   js.configs.recommended,
@@ -9,7 +9,7 @@ export default [
     files: ['**/*.{ts,tsx}'],
     ignores: ['dist/**', 'node_modules/**'],
     languageOptions: {
-      parser: typescriptParser,
+      parser: tsParser,
       parserOptions: {
         ecmaFeatures: { jsx: true },
         ecmaVersion: 'latest',
@@ -18,21 +18,14 @@ export default [
       }
     },
     plugins: {
-      react,
       'react-hooks': reactHooks,
-      '@typescript-eslint': typescriptEslint
+      '@typescript-eslint': tsEslint
     },
     rules: {
-      ...react.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
-      ...typescriptEslint.configs.recommended.rules,
-      '@typescript-eslint/no-unused-vars': 'error',
-      '@typescript-eslint/no-explicit-any': 'warn'
-    },
-    settings: {
-      react: { version: 'detect' }
+      ...tsEslint.configs.recommended.rules
     }
   }
 ];
