@@ -1,4 +1,6 @@
+# =============================================================================
 # Binaries
+# =============================================================================
 backend/tagsha-api
 backend/healthcheck
 *.exe
@@ -6,37 +8,111 @@ backend/healthcheck
 *.so
 *.dylib
 
+# =============================================================================
 # Go
+# =============================================================================
 backend/vendor/
 
+# =============================================================================
 # Node / Frontend
+# =============================================================================
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/.npm/
 
-# Environment files (never commit secrets)
+# =============================================================================
+# Environment & Secrets — PII / credential files
+# =============================================================================
 .env
-.env.production
-.env.staging
+.env.*
+!.env.example
+!.env.*.example
+*.env
+!*.env.example
+deploy/stack.env
+deploy/*.env
+!deploy/*.env.example
 secrets/
 !secrets/.gitkeep
 
+# Terraform state & vars (may contain secrets/IPs)
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+
+# Ansible vault / inventory (may contain IPs, passwords)
+ansible/inventory/
+ansible/vault*
+*.vault
+
+# SSH keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+id_rsa
+id_ed25519
+id_ecdsa
+
+# Kubeconfig / cloud credentials
+kubeconfig
+*.kubeconfig
+.aws/
+.azure/
+.gcp/
+service-account*.json
+credentials.json
+
+# =============================================================================
 # Docker
+# =============================================================================
 *.tar
 
+# =============================================================================
 # IDE
+# =============================================================================
 .idea/
 .vscode/
 *.swp
 *.swo
+*.sublime-workspace
 
+# =============================================================================
 # OS
+# =============================================================================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Test coverage
+# =============================================================================
+# Test & Coverage
+# =============================================================================
 backend/coverage.out
 frontend/coverage/
+*.sarif
 
-# Logs
+# =============================================================================
+# Logs & diagnostics
+# =============================================================================
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =============================================================================
+# Misc
+# =============================================================================
+*.bak
+*.tmp
+*.orig

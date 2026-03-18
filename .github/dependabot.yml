@@ -1,39 +1,105 @@
+# =============================================================================
+# Dependabot — automated dependency updates
+# Keeps Go modules, npm packages, GitHub Actions, and Docker base images
+# up to date with minimal noise (weekly batched PRs, sensible limits).
+# =============================================================================
+
 version: 2
 updates:
-  - package-ecosystem: gomod
-    directory: /backend
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
-    labels: [dependencies, go]
-    commit-message:
-      prefix: "deps(go)"
 
-  - package-ecosystem: npm
-    directory: /frontend
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
-    labels: [dependencies, javascript]
-    commit-message:
-      prefix: "deps(npm)"
-
-  - package-ecosystem: docker
-    directory: /infrastructure
-    schedule:
-      interval: weekly
-      day: monday
-    labels: [dependencies, docker]
-    commit-message:
-      prefix: "deps(docker)"
-
+  # ---------------------------------------------------------------------------
+  # GitHub Actions — pin SHAs stay current
+  # ---------------------------------------------------------------------------
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
       day: monday
-    labels: [dependencies, ci]
+      time: '04:00'
+      timezone: Europe/London
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
     commit-message:
-      prefix: "deps(actions)"
+      prefix: 'ci(deps)'
+    groups:
+      docker-actions:
+        patterns:
+          - 'docker/*'
+      actions-actions:
+        patterns:
+          - 'actions/*'
+
+  # ---------------------------------------------------------------------------
+  # Go modules (backend)
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: gomod
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: Europe/London
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - backend
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      go-dependencies:
+        patterns:
+          - '*'
+
+  # ---------------------------------------------------------------------------
+  # npm (frontend)
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: Europe/London
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - frontend
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      npm-dependencies:
+        patterns:
+          - '*'
+
+  # ---------------------------------------------------------------------------
+  # Docker base images
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: Europe/London
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: 'chore(deps)'
+
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: Europe/London
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: 'chore(deps)'

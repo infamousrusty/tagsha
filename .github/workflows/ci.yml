@@ -18,6 +18,14 @@ on:
           - minor
           - major
 
+# ---------------------------------------------------------------------------
+# Concurrency — cancel in-flight runs on the same branch/PR to save minutes.
+# Release and tag pushes are NOT cancelled (group includes the SHA).
+# ---------------------------------------------------------------------------
+concurrency:
+  group: ci-${{ github.ref }}-${{ startsWith(github.ref, 'refs/tags/') && github.sha || 'branch' }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 permissions:
   contents: read
   packages: write
@@ -30,6 +38,7 @@ jobs:
   backend-lint:
     name: Backend Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: backend
@@ -62,6 +71,7 @@ jobs:
   backend-test:
     name: Backend Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: backend-lint
     defaults:
       run:
@@ -95,6 +105,7 @@ jobs:
   frontend-test:
     name: Frontend Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
@@ -128,6 +139,7 @@ jobs:
   security-scan:
     name: Security Scanning
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [backend-test]
     steps:
       - name: Checkout
@@ -144,9 +156,6 @@ jobs:
           go mod tidy
           go mod download
 
-      # Pin to v2.21.4: last gosec release that supports Go 1.24 AND
-      # does not trigger the SSA analyser panic present in v2.22.x.
-      # @latest resolves to v2.24.7 which requires Go >= 1.25.0.
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@v2.21.4
 
@@ -191,6 +200,7 @@ jobs:
   release:
     name: Semantic Release
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [backend-test, frontend-test, security-scan]
     if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
     permissions:
@@ -240,11 +250,12 @@ jobs:
           echo "tag=$NEW_VERSION" >> $GITHUB_OUTPUT
 
   # ---------------------------------------------------------------------------
-  # Docker — build, push to GHCR, container scan (PR/main/develop/manual)
+  # Docker — build, push to GHCR, container scan
   # ---------------------------------------------------------------------------
   docker-build:
     name: Docker Build and Push
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [backend-test, frontend-test, security-scan, release]
     permissions:
       contents: read
@@ -332,10 +343,6 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
 
-      # exit-code 0: scan reports findings as SARIF artifact but does NOT block
-      # the pipeline. Go stdlib CVEs in a scratch-based binary are often unfixable
-      # until the upstream Go toolchain patches them. Review the uploaded SARIF
-      # artifact manually and re-enable exit-code 1 once all findings are resolved.
       - name: Trivy container vulnerability scan (API)
         if: github.event_name != 'pull_request'
         run: |

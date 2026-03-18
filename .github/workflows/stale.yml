@@ -1,0 +1,55 @@
+name: Stale Issues and PRs
+
+# Marks issues and PRs stale after inactivity, then closes them.
+# Protects the project from accumulating noise and reduces triage burden.
+
+on:
+  schedule:
+    # Run daily at 01:00 UTC
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    name: Mark and Close Stale
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/stale@v9
+        with:
+          # --- Issues ----------------------------------------------------------
+          days-before-issue-stale: 30
+          days-before-issue-close: 7
+          stale-issue-label: stale
+          stale-issue-message: >
+            This issue has been automatically marked as stale because it has had
+            no activity for 30 days. It will be closed in 7 days unless it is
+            updated. If this is still relevant, please comment or remove the
+            stale label.
+          close-issue-message: >
+            This issue was closed automatically after 7 days of inactivity
+            following the stale notice. Please open a new issue if this is
+            still relevant.
+
+          # --- Pull Requests ---------------------------------------------------
+          days-before-pr-stale: 14
+          days-before-pr-close: 7
+          stale-pr-label: stale
+          stale-pr-message: >
+            This pull request has been automatically marked as stale because it
+            has had no activity for 14 days. It will be closed in 7 days unless
+            updated. Please rebase and push or leave a comment if this is still
+            active.
+          close-pr-message: >
+            This pull request was closed automatically after 7 days of
+            inactivity following the stale notice.
+
+          # --- Exemptions ------------------------------------------------------
+          # Never stale items with these labels
+          exempt-issue-labels: 'pinned,security,roadmap,blocked'
+          exempt-pr-labels: 'pinned,security,do-not-merge,blocked'
+          exempt-all-milestones: true
