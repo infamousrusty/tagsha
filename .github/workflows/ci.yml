@@ -123,7 +123,7 @@ jobs:
         run: npm run build
 
   # ---------------------------------------------------------------------------
-  # Security — Gosec SAST (via official action), Trivy filesystem secret scan
+  # Security — Gosec SAST, Trivy filesystem secret scan
   # ---------------------------------------------------------------------------
   security-scan:
     name: Security Scanning
@@ -144,14 +144,16 @@ jobs:
           go mod tidy
           go mod download
 
-      # securego/gosec action ships its own pinned binary — no go install
-      # required, no Go toolchain version conflict.
-      # v2.22.2 is the last release that supports Go 1.24.
+      # Pin to v2.21.4: last gosec release that supports Go 1.24 AND
+      # does not trigger the SSA analyser panic present in v2.22.x.
+      # @latest resolves to v2.24.7 which requires Go >= 1.25.0.
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.21.4
+
       - name: Gosec SAST
-        uses: securego/gosec@v2.22.2
-        with:
-          args: '-fmt sarif -out gosec.sarif -exclude-dir=vendor ./...'
-          working-directory: backend
+        working-directory: backend
+        run: |
+          gosec -fmt sarif -out gosec.sarif -exclude-dir=vendor ./...
 
       - name: Upload Gosec SARIF artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
