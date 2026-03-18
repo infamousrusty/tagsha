@@ -6,8 +6,9 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Cache dependency layer before copying source.
-COPY package.json package-lock.json* ./
-RUN npm ci
+# npm ci requires a committed package-lock.json; use npm install instead.
+COPY package.json ./
+RUN npm install --legacy-peer-deps
 
 COPY . .
 RUN npm run build
