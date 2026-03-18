@@ -25,11 +25,11 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Backend — tidy, lint, vet (unchanged)
+  # Backend — tidy, lint, vet
   # ---------------------------------------------------------------------------
   backend-lint:
     name: Backend Lint
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
@@ -57,11 +57,11 @@ jobs:
           working-directory: backend
 
   # ---------------------------------------------------------------------------
-  # Backend — unit tests with race detector (unchanged)
+  # Backend — unit tests with race detector
   # ---------------------------------------------------------------------------
   backend-test:
     name: Backend Tests
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     needs: backend-lint
     defaults:
       run:
@@ -90,11 +90,11 @@ jobs:
         continue-on-error: true
 
   # ---------------------------------------------------------------------------
-  # Frontend — type-check, lint, test, build (unchanged)
+  # Frontend — type-check, lint, test, build
   # ---------------------------------------------------------------------------
   frontend-test:
     name: Frontend Tests
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
@@ -123,11 +123,11 @@ jobs:
         run: npm run build
 
   # ---------------------------------------------------------------------------
-  # Security — Gosec SAST (via official action), Trivy filesystem secret scan
+  # Security — Gosec SAST, Trivy filesystem secret scan
   # ---------------------------------------------------------------------------
   security-scan:
     name: Security Scanning
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     needs: [backend-test]
     steps:
       - name: Checkout
@@ -144,9 +144,9 @@ jobs:
           go mod tidy
           go mod download
 
-      # securego/gosec action installs its own pinned gosec binary — no
-      # 'go install' required, and no Go toolchain version conflict.
-      # v2.22.2 is the last release that supports Go 1.24.
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
       - name: Gosec SAST
         uses: securego/gosec@v2.22.2
         with:
@@ -160,6 +160,10 @@ jobs:
           name: gosec-sarif
           path: backend/gosec.sarif
           retention-days: 30
+
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
 
       - name: Trivy filesystem secret scan
         run: |
@@ -184,7 +188,7 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     name: Semantic Release
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     needs: [backend-test, frontend-test, security-scan]
     if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
     permissions:
@@ -196,7 +200,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          fetch-depth: 0  # For versioning
+          fetch-depth: 0
 
       - name: Semantic Release
         id: release
@@ -204,16 +208,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION_TYPE: ${{ github.event.inputs.version_type || 'patch' }}
         run: |
-          # Fetch latest tag
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')
           echo "Latest tag: $LATEST_TAG"
 
-          # Parse MAJOR.MINOR.PATCH
           MAJOR=$(echo $LATEST_TAG | cut -d. -f1 | sed 's/v//')
           MINOR=$(echo $LATEST_TAG | cut -d. -f2)
           PATCH=$(echo $LATEST_TAG | cut -d. -f3)
 
-          # Bump based on input or default
           if [ "$VERSION_TYPE" = "major" ]; then
             MAJOR=$((MAJOR + 1))
             MINOR=0
@@ -221,14 +222,13 @@ jobs:
           elif [ "$VERSION_TYPE" = "minor" ]; then
             MINOR=$((MINOR + 1))
             PATCH=0
-          else  # patch
+          else
             PATCH=$((PATCH + 1))
           fi
 
           NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
           echo "New version: $NEW_VERSION"
 
-          # Tag & push
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git tag $NEW_VERSION
@@ -242,7 +242,7 @@ jobs:
   # ---------------------------------------------------------------------------
   docker-build:
     name: Docker Build and Push
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     needs: [backend-test, frontend-test, security-scan, release]
     permissions:
       contents: read
@@ -252,14 +252,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Pre-pull base images
-        run: |
-          docker pull golang:1.24-alpine || true
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff9c98d2047eb8db888 # v3.6.0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-        with:
-          driver: docker
 
       - name: Log in to GHCR
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
@@ -268,77 +265,86 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute Docker tags
-        id: compute-tags
+      - name: Resolve version
+        id: version
         run: |
-          TAGS=""
-          
-          # Branch/PR ref
-          if [[ "${{ github.ref }}" == refs/heads/* ]]; then
-            TAGS+="type=ref,event=branch,"
-          elif [[ "${{ github.ref }}" == refs/pull/* ]]; then
-            TAGS+="type=ref,event=pr,"
-          fi
-          
-          # SHA
-          TAGS+="type=sha,prefix=sha-,"
-          
-          # Latest on main
-          if [[ "${{ github.ref }}" == refs/heads/main ]]; then
-            TAGS+="type=raw,value=latest,"
-          fi
-          
-          # Release version or dev
           if [[ "${{ needs.release.outputs.version }}" != "" ]]; then
-            VERSION="${{ needs.release.outputs.version }}"
+            echo "value=${{ needs.release.outputs.version }}" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref }}" == refs/heads/main || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION="dev"
+            echo "value=dev" >> $GITHUB_OUTPUT
           else
-            VERSION="sha-${{ github.sha_short }}"
+            echo "value=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
           fi
-          TAGS+="type=raw,value=$VERSION"
-          
-          echo "tags<<EOF" >> $GITHUB_OUTPUT
-          echo "$TAGS" >> $GITHUB_OUTPUT
-          echo "version<<EOF" >> $GITHUB_OUTPUT
-          echo "$VERSION" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Extract metadata
-        id: meta
+      - name: Extract API metadata
+        id: api-meta
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/tagsha-api
-          tags: ${{ steps.compute-tags.outputs.tags }}
-          flavor: |
-            latest=auto
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ steps.version.outputs.value }}
 
-      - name: Build and push
+      - name: Build and push API image
+        id: api-build
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           context: backend
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ steps.compute-tags.outputs.version }}
+          tags: ${{ steps.api-meta.outputs.tags }}
+          labels: ${{ steps.api-meta.outputs.labels }}
+          build-args: VERSION=${{ steps.version.outputs.value }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Trivy container vulnerability scan
+      - name: Extract frontend metadata
+        id: fe-meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/tagsha-frontend
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ steps.version.outputs.value }}
+
+      - name: Build and push frontend image
+        id: fe-build
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
+        with:
+          context: frontend
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.fe-meta.outputs.tags }}
+          labels: ${{ steps.fe-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install Trivy
         if: always()
         run: |
-          IMAGE=${{ steps.meta.outputs.tags }}
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Trivy container vulnerability scan (API)
+        if: github.event_name != 'pull_request'
+        run: |
           trivy image \
             --exit-code 1 \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
             --format sarif \
-            --output trivy-container.sarif \
-            $IMAGE
+            --output trivy-api-container.sarif \
+            ghcr.io/${{ github.repository_owner }}/tagsha-api:${{ steps.version.outputs.value }}
 
-      - name: Upload Trivy container SARIF artifact
+      - name: Upload Trivy API container SARIF
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: trivy-container-sarif
-          path: trivy-container.sarif
+          name: trivy-api-container-sarif
+          path: trivy-api-container.sarif
           retention-days: 30

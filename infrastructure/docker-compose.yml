@@ -1,11 +1,12 @@
 # TagSha Production Docker Compose Stack
 # Prerequisites:
-#   1. Copy .env.example to .env
+#   1. Copy .env.example to .env and fill in values
 #   2. echo 'ghp_...' > secrets/github_token
 #   3. echo 'strongpassword' > secrets/grafana_admin_password
 #   4. docker compose -f infrastructure/docker-compose.yml up -d
-
-version: '3.9'
+#
+# Required GitHub Actions secrets for deploy workflow:
+#   DEPLOY_HOST, DEPLOY_USER, SSH_PRIVATE_KEY, GHCR_TOKEN
 
 services:
 
@@ -18,7 +19,6 @@ services:
       - "443:443/udp"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ../frontend/dist:/srv/frontend:ro
       - caddy-data:/data
       - caddy-config:/config
       - caddy-logs:/logs
@@ -32,6 +32,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      frontend:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost/health"]
       interval: 15s
@@ -42,13 +44,28 @@ services:
       resources:
         limits: { cpus: '0.5', memory: 128M }
 
+  frontend:
+    image: ghcr.io/infamousrusty/tagsha-frontend:${VERSION:-latest}
+    restart: unless-stopped
+    networks: [internal]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { cpus: '0.25', memory: 64M }
+
   api:
     image: ghcr.io/infamousrusty/tagsha-api:${VERSION:-latest}
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
-      args:
-        VERSION: ${VERSION:-dev}
     restart: unless-stopped
     networks: [internal]
     environment:
