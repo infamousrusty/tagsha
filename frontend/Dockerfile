@@ -1,7 +1,7 @@
 # =============================================================================
 # Stage 1 — Builder
 # =============================================================================
-FROM node:22-alpine AS builder
+FROM node:25-alpine AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ RUN npm run build
 # =============================================================================
 # Stage 2 — Runtime (nginx — serves built SPA)
 # =============================================================================
-FROM nginx:1.27-alpine
+FROM nginx:1.29-alpine
 
 # Drop all capabilities; nginx only needs to bind on 80 (non-privileged inside container).
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

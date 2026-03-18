@@ -11,7 +11,7 @@
 services:
 
   # ---------------------------------------------------------------------------
-  # Redis — in-memory cache for API responses
+  # Redis — in-memory cache, isolated to internal network only
   # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
@@ -32,8 +32,12 @@ services:
 
   # ---------------------------------------------------------------------------
   # API — Go backend (scratch image, runs as UID 1000)
-  # The GitHub token is read from the TAGSHA_GITHUB_TOKEN env var.
-  # No token is required for public repos but rate limits apply without one.
+  #
+  # Attached to BOTH networks:
+  #   tagsha-internal  — reaches Redis
+  #   tagsha-egress    — outbound internet to api.github.com
+  #
+  # The GitHub token is optional (see stack.env.example).
   # ---------------------------------------------------------------------------
   api:
     image: ghcr.io/infamousrusty/tagsha-api:${TAGSHA_VERSION:-latest}
@@ -43,6 +47,7 @@ services:
         condition: service_healthy
     networks:
       - tagsha-internal
+      - tagsha-egress
     environment:
       TAGSHA_PORT: "8080"
       TAGSHA_REDIS_URL: "redis://redis:6379/0"
@@ -53,7 +58,7 @@ services:
       TAGSHA_MAX_PAGES: "${TAGSHA_MAX_PAGES:-10}"
       TAGSHA_DOMAIN: "${TAGSHA_DOMAIN:-localhost}"
       # Optional — omit or leave blank to use unauthenticated GitHub API
-      # (60 req/hr limit). Provide a PAT to raise the limit to 5000 req/hr.
+      # (60 req/hr). Provide a PAT for 5,000 req/hr.
       TAGSHA_GITHUB_TOKEN: "${TAGSHA_GITHUB_TOKEN:-}"
     healthcheck:
       # scratch image has no shell — must use CMD exec form, not CMD-SHELL
@@ -85,11 +90,15 @@ services:
       start_period: 5s
 
 networks:
-  # Internal — redis and api are unreachable from the host
+  # Internal — Redis only; no host or internet access
   tagsha-internal:
     driver: bridge
     internal: true
 
-  # External — only the frontend is accessible from the host
+  # Egress — API outbound internet (api.github.com); not exposed to host
+  tagsha-egress:
+    driver: bridge
+
+  # External — frontend host port binding only
   tagsha-external:
     driver: bridge
