@@ -38,10 +38,11 @@ tagsha.yourdomain.com {
         reverse_proxy grafana:3000
     }
 
+    # All other traffic proxied to the frontend nginx container (SPA)
     handle {
-        root * /srv/frontend
-        try_files {path} /index.html
-        file_server
-        encode gzip zstd
+        reverse_proxy frontend:80 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
     }
 }

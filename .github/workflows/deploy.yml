@@ -1,0 +1,66 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image tag to deploy (e.g. v1.2.3 or latest)'
+        required: false
+        default: 'latest'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    environment: production
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Resolve deploy version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "value=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "value=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DEPLOY_VERSION
+          script: |
+            set -euo pipefail
+            cd /opt/tagsha
+
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            export VERSION="$DEPLOY_VERSION"
+            docker compose -f infrastructure/docker-compose.yml pull
+            docker compose -f infrastructure/docker-compose.yml up -d --remove-orphans
+            docker image prune -f
+
+            echo "Deploy complete: version=$DEPLOY_VERSION"
+        env:
+          DEPLOY_VERSION: ${{ steps.version.outputs.value }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+
+      - name: Smoke test
+        run: |
+          echo "Waiting 15s for services to stabilise..."
+          sleep 15
+          HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" --max-time 15 "https://${{ secrets.DEPLOY_HOST }}/health")
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "Smoke test FAILED — /health returned HTTP $HTTP_STATUS"
+            exit 1
+          fi
+          echo "Smoke test PASSED — /health returned HTTP $HTTP_STATUS"
