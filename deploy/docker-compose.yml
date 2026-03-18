@@ -1,0 +1,95 @@
+# =============================================================================
+# tagsha — Portainer Stack
+#
+# Deploy via Portainer:
+#   Stacks > Add stack > paste contents or upload this file
+#   Load environment variables from deploy/stack.env.example
+#
+# See docs/deployment.md for full instructions.
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Redis — in-memory cache for API responses
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server
+      --save ""
+      --appendonly no
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+    networks:
+      - tagsha-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # API — Go backend (scratch image, runs as UID 1000)
+  # The GitHub token is read from the TAGSHA_GITHUB_TOKEN env var.
+  # No token is required for public repos but rate limits apply without one.
+  # ---------------------------------------------------------------------------
+  api:
+    image: ghcr.io/infamousrusty/tagsha-api:${TAGSHA_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - tagsha-internal
+    environment:
+      TAGSHA_PORT: "8080"
+      TAGSHA_REDIS_URL: "redis://redis:6379/0"
+      TAGSHA_ENV: "${TAGSHA_ENV:-production}"
+      TAGSHA_LOG_LEVEL: "${TAGSHA_LOG_LEVEL:-info}"
+      TAGSHA_CACHE_TTL_SECONDS: "${TAGSHA_CACHE_TTL_SECONDS:-300}"
+      TAGSHA_RATE_LIMIT_RPM: "${TAGSHA_RATE_LIMIT_RPM:-60}"
+      TAGSHA_MAX_PAGES: "${TAGSHA_MAX_PAGES:-10}"
+      TAGSHA_DOMAIN: "${TAGSHA_DOMAIN:-localhost}"
+      # Optional — omit or leave blank to use unauthenticated GitHub API
+      # (60 req/hr limit). Provide a PAT to raise the limit to 5000 req/hr.
+      TAGSHA_GITHUB_TOKEN: "${TAGSHA_GITHUB_TOKEN:-}"
+    healthcheck:
+      # scratch image has no shell — must use CMD exec form, not CMD-SHELL
+      test: ["CMD", "/usr/local/bin/healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Frontend — nginx SPA + /api/ reverse proxy to the Go backend
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: ghcr.io/infamousrusty/tagsha-frontend:${TAGSHA_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - tagsha-internal
+      - tagsha-external
+    ports:
+      - "${TAGSHA_FRONTEND_PORT:-3000}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+networks:
+  # Internal — redis and api are unreachable from the host
+  tagsha-internal:
+    driver: bridge
+    internal: true
+
+  # External — only the frontend is accessible from the host
+  tagsha-external:
+    driver: bridge
