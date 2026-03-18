@@ -123,7 +123,7 @@ jobs:
         run: npm run build
 
   # ---------------------------------------------------------------------------
-  # Security — Gosec SAST, Trivy filesystem secret scan
+  # Security — Gosec SAST (via official action), Trivy filesystem secret scan
   # ---------------------------------------------------------------------------
   security-scan:
     name: Security Scanning
@@ -144,9 +144,9 @@ jobs:
           go mod tidy
           go mod download
 
-      - name: Install gosec
-        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
-
+      # securego/gosec action ships its own pinned binary — no go install
+      # required, no Go toolchain version conflict.
+      # v2.22.2 is the last release that supports Go 1.24.
       - name: Gosec SAST
         uses: securego/gosec@v2.22.2
         with:
