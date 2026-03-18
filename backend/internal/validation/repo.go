@@ -16,7 +16,7 @@ var (
 	repoRegex = regexp.MustCompile(`^[a-zA-Z0-9_\.\-]{1,100}$`)
 
 	// knownRegistries lists all registry hostnames we strip before parsing.
-	// These are never passed to the GitHub API — only owner/repo is extracted.
+	// These are never passed to the GitHub API - only owner/repo is extracted.
 	knownRegistries = []string{
 		"ghcr.io",
 		"docker.io",
@@ -42,29 +42,34 @@ type RepoIdentifier struct {
 
 // ParseInput accepts any of the following forms and extracts a GitHub owner/repo:
 //
-//	// Plain
+// Plain:
+//
 //	owner/repo
 //	owner/repo:tag
 //
-//	// GitHub
+// GitHub:
+//
 //	github.com/owner/repo
 //	https://github.com/owner/repo
 //	https://github.com/owner/repo.git
 //
-//	// GHCR
+// GHCR:
+//
 //	ghcr.io/owner/repo
 //	ghcr.io/owner/repo:tag
 //	ghcr.io/owner/repo:tag@sha256:<digest>
 //	ghcr.io/owner/repo@sha256:<digest>
 //	https://ghcr.io/owner/repo:latest
 //
-//	// Docker Hub registry endpoints
+// Docker Hub registry endpoints:
+//
 //	docker.io/owner/repo[:tag]
 //	registry-1.docker.io/owner/repo[:tag]
 //	index.docker.io/owner/repo[:tag]
 //	registry.hub.docker.com/owner/repo[:tag]
 //
-//	// Docker Hub web UI
+// Docker Hub web UI:
+//
 //	https://hub.docker.com/r/owner/repo
 //	https://hub.docker.com/r/owner/repo/tags
 //	https://hub.docker.com/repository/docker/owner/repo
@@ -93,38 +98,29 @@ func ParseInput(input string) (*RepoIdentifier, error) {
 
 	host := strings.ToLower(u.Hostname())
 
-	// -----------------------------------------------------------------
-	// GitHub web URLs  (github.com)
-	// -----------------------------------------------------------------
+	// GitHub web URLs (github.com)
 	if host == "github.com" {
 		return parseGitHubURL(u)
 	}
 
-	// -----------------------------------------------------------------
-	// Docker Hub web UI  (hub.docker.com)
-	// -----------------------------------------------------------------
+	// Docker Hub web UI (hub.docker.com)
 	for _, h := range dockerHubWebHosts {
 		if host == h {
 			return parseDockerHubWebURL(u)
 		}
 	}
 
-	// -----------------------------------------------------------------
-	// Registry endpoints: ghcr.io, docker.io, registry-1.docker.io …
-	// These all follow  registry/owner/repo[:tag][@digest]
-	// -----------------------------------------------------------------
+	// Registry endpoints: ghcr.io, docker.io, registry-1.docker.io ...
+	// These all follow registry/owner/repo[:tag][@digest]
 	for _, reg := range knownRegistries {
 		if host == reg {
 			return parseRegistryRef(u.Path)
 		}
 	}
 
-	// -----------------------------------------------------------------
-	// Bare  owner/repo[:tag]  (no recognised host prefix)
-	// -----------------------------------------------------------------
+	// Bare owner/repo[:tag] (no recognised host prefix).
+	// Reject anything with an unrecognised host to prevent SSRF.
 	if host != "" && u.Path != "" {
-		// Input looked like  somehost/path — reject unknown hosts to
-		// prevent SSRF via a registry we don't explicitly allow.
 		return nil, errors.New(
 			"unsupported registry or host: only github.com, ghcr.io, docker.io, " +
 				"registry-1.docker.io, index.docker.io, registry.hub.docker.com, " +
@@ -132,13 +128,11 @@ func ParseInput(input string) (*RepoIdentifier, error) {
 		)
 	}
 
-	// No host detected — treat raw input as  owner/repo[:tag]
+	// No host detected - treat raw input as owner/repo[:tag]
 	return parseBareRef(input)
 }
 
-// ---------------------------------------------------------------------------
-// GitHub  https://github.com/owner/repo[.git][/anything]
-// ---------------------------------------------------------------------------
+// parseGitHubURL handles https://github.com/owner/repo[.git][/anything].
 func parseGitHubURL(u *url.URL) (*RepoIdentifier, error) {
 	parts := splitPath(u.Path)
 	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
@@ -148,12 +142,10 @@ func parseGitHubURL(u *url.URL) (*RepoIdentifier, error) {
 	return validateParts(parts[0], repo)
 }
 
-// ---------------------------------------------------------------------------
-// Docker Hub web UI
+// parseDockerHubWebURL handles Docker Hub web UI URLs:
 //
 //	hub.docker.com/r/owner/repo[/...]
 //	hub.docker.com/repository/docker/owner/repo[/...]
-// ---------------------------------------------------------------------------
 func parseDockerHubWebURL(u *url.URL) (*RepoIdentifier, error) {
 	parts := splitPath(u.Path)
 
@@ -175,23 +167,22 @@ func parseDockerHubWebURL(u *url.URL) (*RepoIdentifier, error) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Registry image ref  /owner/repo[:tag][@sha256:<digest>]
+// parseRegistryRef handles registry image refs of the form:
 //
-// Docker distribution spec:
-//   name      = owner "/" repo
-//   reference = name [ ":" tag ] [ "@" digest ]
-//   digest    = "sha256:" hex
-// ---------------------------------------------------------------------------
+//	/owner/repo[:tag][@sha256:<digest>]
+//
+// Per the Docker distribution spec:
+//
+//	reference = name [ ":" tag ] [ "@" digest ]
 func parseRegistryRef(path string) (*RepoIdentifier, error) {
 	path = strings.TrimPrefix(path, "/")
 
-	// Strip digest  (@sha256:…) — appears after tag or directly after name.
+	// Strip digest (@sha256:...) - appears after tag or directly after name.
 	if idx := strings.Index(path, "@"); idx != -1 {
 		path = path[:idx]
 	}
 
-	// Strip tag  (:tag) — only from the repo segment.
+	// Strip tag (:tag) - only from the repo segment.
 	if idx := strings.LastIndex(path, ":"); idx != -1 {
 		path = path[:idx]
 	}
@@ -203,15 +194,13 @@ func parseRegistryRef(path string) (*RepoIdentifier, error) {
 	return validateParts(parts[0], parts[1])
 }
 
-// ---------------------------------------------------------------------------
-// Bare  owner/repo[:tag]  — input had no recognised host.
-// ---------------------------------------------------------------------------
+// parseBareRef handles raw owner/repo[:tag] input with no recognised host.
 func parseBareRef(input string) (*RepoIdentifier, error) {
 	// Strip digest.
 	if idx := strings.Index(input, "@"); idx != -1 {
 		input = input[:idx]
 	}
-	// Strip tag — only from the repo segment (after the first slash).
+	// Strip tag - only from the repo segment (after the first slash).
 	if slashIdx := strings.Index(input, "/"); slashIdx != -1 {
 		owner := input[:slashIdx]
 		repo := input[slashIdx+1:]
@@ -222,10 +211,6 @@ func parseBareRef(input string) (*RepoIdentifier, error) {
 	}
 	return nil, errors.New("format must be owner/repo, a registry image ref, or a supported URL")
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 func splitPath(p string) []string {
 	return strings.Split(strings.Trim(p, "/"), "/")
@@ -238,12 +223,12 @@ func validateParts(owner, repo string) (*RepoIdentifier, error) {
 
 	if !ownerRegex.MatchString(owner) {
 		return nil, errors.New(
-			"invalid owner name: must be 1\u201339 alphanumeric characters or hyphens, cannot start or end with a hyphen",
+			"invalid owner name: must be 1-39 alphanumeric characters or hyphens, cannot start or end with a hyphen",
 		)
 	}
 	if !repoRegex.MatchString(repo) {
 		return nil, errors.New(
-			"invalid repository name: must be 1\u2013100 alphanumeric characters, dots, hyphens, or underscores",
+			"invalid repository name: must be 1-100 alphanumeric characters, dots, hyphens, or underscores",
 		)
 	}
 
