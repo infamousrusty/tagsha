@@ -148,9 +148,10 @@ jobs:
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
       - name: Gosec SAST
-        working-directory: backend
-        run: |
-          gosec -fmt sarif -out gosec.sarif -exclude-dir=vendor ./...
+        uses: securego/gosec@v2.22.2
+        with:
+          args: '-fmt sarif -out gosec.sarif -exclude-dir=vendor ./...'
+          working-directory: backend
 
       - name: Upload Gosec SARIF artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
