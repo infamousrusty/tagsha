@@ -1,0 +1,122 @@
+name: Force Apply License Headers
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to analyze and apply headers to'
+        required: true
+        default: 'main'
+
+# Grant the default GITHUB_TOKEN permission to push commits
+permissions:
+  contents: write
+
+jobs:
+  enforce-headers:
+    name: Analyze and Apply Headers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+
+      - name: Inject Missing SPDX Headers
+        run: |
+          YEAR="2026"
+          AUTHOR="Anton-Curtis Cooper (infamousrusty)"
+
+          # Define the comment blocks
+          read -r -d '' HASH_HEADER << EOF || true
+          # SPDX-License-Identifier: GPL-3.0-or-later
+          #
+          # Copyright (C) $YEAR $AUTHOR
+          #
+          # This program is free software: you can redistribute it and/or modify
+          # it under the terms of the GNU General Public License as published by
+          # the Free Software Foundation, either version 3 of the License, or
+          # (at your option) any later version.
+          #
+          # This program is distributed in the hope that it will be useful,
+          # but WITHOUT ANY WARRANTY; without even the implied warranty of
+          # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+          # GNU General Public License for more details.
+          #
+          # You should have received a copy of the GNU General Public License
+          # along with this program.  If not, see <https://www.gnu.org/licenses/>.
+          EOF
+
+          read -r -d '' SLASH_HEADER << EOF || true
+          // SPDX-License-Identifier: GPL-3.0-or-later
+          //
+          // Copyright (C) $YEAR $AUTHOR
+          //
+          // This program is free software: you can redistribute it and/or modify
+          // it under the terms of the GNU General Public License as published by
+          // the Free Software Foundation, either version 3 of the License, or
+          // (at your option) any later version.
+          //
+          // This program is distributed in the hope that it will be useful,
+          // but WITHOUT ANY WARRANTY; without even the implied warranty of
+          // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+          // GNU General Public License for more details.
+          //
+          // You should have received a copy of the GNU General Public License
+          // along with this program.  If not, see <https://www.gnu.org/licenses/>.
+          EOF
+
+          add_header() {
+              local file=$1
+              local header_type=$2
+              local tmp_file=$(mktemp)
+
+              # Skip if file already has SPDX identifier
+              if grep -q "SPDX-License-Identifier" "$file"; then
+                  return
+              fi
+
+              echo "Fixing $file..."
+
+              first_line=$(head -n 1 "$file" || true)
+              if [[ $first_line == "#!"* ]]; then
+                  head -n 1 "$file" > "$tmp_file"
+                  echo "" >> "$tmp_file"
+                  [ "$header_type" == "hash" ] && echo "$HASH_HEADER" >> "$tmp_file" || echo "$SLASH_HEADER" >> "$tmp_file"
+                  echo "" >> "$tmp_file"
+                  tail -n +2 "$file" >> "$tmp_file"
+              else
+                  [ "$header_type" == "hash" ] && echo "$HASH_HEADER" > "$tmp_file" || echo "$SLASH_HEADER" > "$tmp_file"
+                  echo "" >> "$tmp_file"
+                  cat "$file" >> "$tmp_file"
+              fi
+
+              mv "$tmp_file" "$file"
+          }
+
+          # Target Scripting & Config files
+          find . -type f ( -name "*.py" -o -name "*.sh" -o -name "*.yml" -o -name "*.yaml" -o -name "*.tf" ) -not -path "*/.*" | while read -r file; do
+              add_header "$file" "hash"
+          done
+
+          # Target C-Style Languages
+          find . -type f ( -name "*.go" -o -name "*.js" -o -name "*.ts" ) -not -path "*/.*" -not -path "*/node_modules/*" | while read -r file; do
+              add_header "$file" "slash"
+          done
+
+      - name: Commit and Push Changes
+        run: |
+          # Configure official GitHub Actions bot identity
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          # Check if there are any changes to commit
+          if [[ -z $(git status --porcelain) ]]; then
+            echo "All files already have correct headers. Nothing to commit."
+            exit 0
+          fi
+          
+          # Stage and commit the modified files
+          git add -u
+          git commit -m "chore(license): forcefully enforce GPL-3.0-or-later SPDX headers [skip ci]"
+          git push origin ${{ github.event.inputs.branch }}
