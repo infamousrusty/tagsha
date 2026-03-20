@@ -5,6 +5,7 @@
 [![CI](https://github.com/infamousrusty/tagsha/actions/workflows/ci.yml/badge.svg)](https://github.com/infamousrusty/tagsha/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/infamousrusty/tagsha)](https://goreportcard.com/report/github.com/infamousrusty/tagsha)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Finfamousrusty%2Ftagsha.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Finfamousrusty%2Ftagsha?ref=badge_shield)
 
 ---
 
@@ -212,3 +213,6 @@ See [docs/deployment.md](docs/deployment.md) for Grafana access details.
 ## License
 
 [MIT](LICENSE)
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Finfamousrusty%2Ftagsha.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Finfamousrusty%2Ftagsha?ref=badge_large)
