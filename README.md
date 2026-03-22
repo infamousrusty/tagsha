@@ -4,7 +4,11 @@
 
 [![CI](https://github.com/infamousrusty/tagsha/actions/workflows/ci.yml/badge.svg)](https://github.com/infamousrusty/tagsha/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/infamousrusty/tagsha)](https://goreportcard.com/report/github.com/infamousrusty/tagsha)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: LGPL-3.0-or-later](https://img.shields.io/badge/License-LGPL--3.0--or--later-blue.svg)](LICENSE)
+
+[![Release](https://img.shields.io/github/v/release/infamousrusty/tagsha)](https://github.com/infamousrusty/tagsha/releases)
+[![Last Commit](https://img.shields.io/github/last-commit/infamousrusty/tagsha)](https://github.com/infamousrusty/tagsha/commits)
+[![Repo Size](https://img.shields.io/github/repo-size/infamousrusty/tagsha)](https://github.com/infamousrusty/tagsha)
 
 ---
 
@@ -211,4 +215,4 @@ See [docs/deployment.md](docs/deployment.md) for Grafana access details.
 
 ## License
 
-[MIT](LICENSE)
+[LGPL-3.0-or-later](LICENSE)
