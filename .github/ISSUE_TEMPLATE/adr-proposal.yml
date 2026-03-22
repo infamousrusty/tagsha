@@ -1,0 +1,51 @@
+name: Architecture Decision Record (ADR) Proposal
+description: Propose a new architecture decision for tagsha
+title: "[ADR]: "
+labels: ["adr-proposal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for proposing an architecture decision! Please ensure all inputs are in **UK English** (e.g., minimise, pseudonymisation).
+        
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Describe the architectural context and the problem being solved.
+    validations:
+      required: true
+
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision
+      description: Describe the proposed architecture decision and the exact implementation details.
+    validations:
+      required: true
+
+  - type: textarea
+    id: consequences
+    attributes:
+      label: Consequences
+      description: Describe the positive and negative technical consequences of this decision.
+    validations:
+      required: true
+
+  - type: textarea
+    id: lgpl
+    attributes:
+      label: LGPL-3.0-or-later Evaluation
+      description: Explain dependency checks and confirm no proprietary code is statically linked.
+      placeholder: "No new dependencies are introduced, remaining compliant with LGPL-3.0-or-later."
+    validations:
+      required: true
+
+  - type: textarea
+    id: gdpr
+    attributes:
+      label: GDPR & PII Evaluation
+      description: Describe data processing, minimisation, and pseudonymisation strategies.
+      placeholder: "This architecture does not process any new PII. All existing identifiers are pseudonymised."
+    validations:
+      required: true
