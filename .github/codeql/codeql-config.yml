@@ -1,0 +1,12 @@
+name: tagsha CodeQL config
+
+queries:
+  - uses: security-extended
+  - uses: security-and-quality
+
+paths-ignore:
+  - vendor
+  - '**/*_test.go'
+  - '**/*.mock.go'
+  - node_modules
+  - adr

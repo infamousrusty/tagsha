@@ -1,0 +1,15 @@
+{
+  "version": "0.2",
+  "language": "en-GB",
+  "words": [
+    "tagsha",
+    "infamousrusty",
+    "pseudonymisation",
+    "pseudonymised",
+    "unconsented"
+  ],
+  "ignorePaths": [
+    "node_modules",
+    ".git"
+  ]
+}

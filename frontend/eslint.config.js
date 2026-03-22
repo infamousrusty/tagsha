@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+// Copyright (C) 2026 infamousrusty
+
 import js from '@eslint/js';
 import reactHooks from 'eslint-plugin-react-hooks';
 import tsEslint from '@typescript-eslint/eslint-plugin';

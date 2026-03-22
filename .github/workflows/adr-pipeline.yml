@@ -1,0 +1,86 @@
+name: ADR Compliance Pipeline
+
+on:
+  pull_request:
+    paths:
+      - 'adr/**/*.md'
+  push:
+    branches:
+      - main
+    paths:
+      - 'adr/**/*.md'
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  validate-and-index:
+    name: Validate Compliance and Update Index
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: UK English Spelling Check
+        uses: streetsidesoftware/cspell-action@v6
+        with:
+          config: '.github/cspell.json'
+          files: 'adr/**/*.md'
+          strict: true
+
+      - name: PII and Secrets Scanning
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enforce LGPL and GDPR Sections
+        run: |
+          # 1. Check if the directory exists first
+          if [ ! -d "adr/" ]; then
+            echo "Directory adr/ does not exist. Skipping compliance checks."
+            exit 0
+          fi
+
+          echo "Scanning ADRs for compliance sections..."
+          
+          # 2. Use a while read loop to safely handle spaces in filenames
+          find adr/ -type f -name '*.md' -not -name 'README.md' -not -name 'template.md' | while read -r file; do
+            echo "Checking: $file"
+            
+            # 3. Check for LGPL section
+            if ! grep -qi "LGPL-3.0-or-later Evaluation" "$file"; then
+              echo "::error file=$file::Missing LGPL-3.0-or-later compliance evaluation."
+              exit 1
+            fi
+            
+            # 4. Check for GDPR section
+            if ! grep -qi "GDPR & PII Evaluation" "$file"; then
+              echo "::error file=$file::Missing GDPR/PII compliance evaluation."
+              exit 1
+            fi
+            
+            echo "  -> Passed compliance check!"
+          done
+        shell: bash
+
+      - name: Set up Node.js
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate ADR Index
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          npx adr-log -d adr/ > adr/README.md
+        shell: bash
+
+      - name: Commit ADR Index
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs(adr): auto-update decision log [skip ci]"
+          file_pattern: 'adr/README.md'

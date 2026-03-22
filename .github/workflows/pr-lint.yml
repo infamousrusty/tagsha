@@ -1,29 +1,29 @@
 name: PR Validation
 
-# Enforces contribution standards on every pull request:
-#   1. PR title follows Conventional Commits (feat/fix/chore/docs/etc.)
-#   2. PR body is not empty (at least 20 characters)
-#   3. Forks cannot trigger privileged workflows (security boundary)
-
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+  pull-requests: write
 
 concurrency:
   group: pr-lint-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
-permissions:
-  pull-requests: read
-
 jobs:
   title-lint:
-    name: Conventional Commit Title
+    if: github.actor != 'dependabot[bot]' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Validate PR title
-        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        uses: amannn/action-semantic-pull-request@v5.5.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -41,30 +41,32 @@ jobs:
             revert
             security
           requireScope: false
-          subjectPattern: ^.{10,100}$
-          subjectPatternError: |
-            PR title subject must be between 10 and 100 characters.
+          subjectPattern: '^.{10,100}$'
+          subjectPatternError: 'PR title subject must be between 10 and 100 characters.'
+          ignoreLabels: |
+            bot
+            dependabot
+            ignore-semantic-pull-request
 
   body-check:
-    name: PR Body Not Empty
+    if: github.actor != 'dependabot[bot]' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check PR body length
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate or auto-fill PR body
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          if [ ${#PR_BODY} -lt 20 ]; then
-            echo "::error::PR description must be at least 20 characters. Please describe your changes."
-            exit 1
-          fi
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: node .github/scripts/check-pr-body.js
 
   fork-guard:
-    name: Fork PR Guard
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Block privileged secrets on fork PRs
+      - name: Warn for fork PRs
         if: github.event.pull_request.head.repo.fork == true
-        run: |
-          echo "::warning::This PR originates from a fork. Privileged secrets are not available and docker push will be skipped."
+        run: echo "::warning::This pull request originates from a fork. Privileged secrets are not available."

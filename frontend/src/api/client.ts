@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+// Copyright (C) 2026 infamousrusty
+
 import type { TagsResponse, ResolveResponse } from '../types'
 
 const BASE = '/api/v1'
