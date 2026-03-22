@@ -76,8 +76,8 @@ jobs:
           title: "docs(adr): ${{ github.event.issue.title }}"
           body: "Automatically generated ADR from Issue #${{ github.event.issue.number }}. Ready for review."
           labels: "architecture"
-          reviewers: "infamousrusty" # <--- Automatically requests your review
-          assignees: "infamousrusty" # <--- Assigns the PR to you
+          reviewers: "infamousrusty" 
+          assignees: "infamousrusty" 
           delete-branch: true
 
       - name: Close Issue
