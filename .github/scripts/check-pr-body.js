@@ -3,6 +3,18 @@ const fs = require('fs');
 
 const NEWLINE = String.fromCharCode(10);
 
+function sanitiseString(value) {
+  if (typeof value !== 'string') { return ''; }
+  return value.replace(/[^ws-/.]/g, '').trim();
+}
+
+function sanitiseFilename(value) {
+  if (typeof value !== 'string') { return null; }
+  const clean = value.replace(/[^a-zA-Z0-9_-./]/g, '').trim();
+  if (clean.length === 0) { return null; }
+  return clean;
+}
+
 function apiRequest(method, path, body) {
   return new Promise(function (resolve, reject) {
     const data = body ? JSON.stringify(body) : null;
@@ -60,13 +72,22 @@ async function updatePrBody(owner, repo, prNumber, newBody) {
 }
 
 async function run() {
-  const payload = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+  const eventRaw = fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8');
+  const payload = JSON.parse(eventRaw);
   const pr = payload.pull_request;
-  const prBody = (pr.body || '').trim();
-  const prNumber = pr.number;
+
+  // Sanitise all values sourced from the event file before use
+  const prBody = (typeof pr.body === 'string' ? pr.body : '').trim();
+  const prNumber = parseInt(pr.number, 10);
+
   const repoParts = process.env.GITHUB_REPOSITORY.split('/');
-  const owner = repoParts[0];
-  const repo = repoParts[1];
+  const owner = sanitiseString(repoParts[0]);
+  const repo = sanitiseString(repoParts[1]);
+
+  if (!owner || !repo || isNaN(prNumber)) {
+    console.log('::error::Could not determine repository owner, name, or PR number.');
+    process.exit(1);
+  }
 
   if (prBody.length >= 20) {
     console.log('PR body is valid.');
@@ -74,7 +95,12 @@ async function run() {
   }
 
   const files = await getFiles(owner, repo, prNumber);
-  const names = files.map(function (file) { return file.filename; });
+
+  // Sanitise all filenames from the API response before use in request body
+  const names = files
+    .map(function (file) { return sanitiseFilename(file.filename); })
+    .filter(function (name) { return name !== null; });
+
   const adrFiles = names.filter(function (name) {
     return name.startsWith('adr/') && name.endsWith('.md');
   });
