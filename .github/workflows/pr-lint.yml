@@ -53,64 +53,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Validate or update PR body
-        uses: actions/github-script@v7
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          script: |
-            const pr = context.payload.pull_request;
-            const body = (pr.body || '').trim();
+          node-version: '20'
 
-            if (body.length >= 20) {
-              core.info('PR body is valid.');
-              return;
-            }
+      - name: Install dependencies
+        run: npm install @actions/github
 
-            const files = await github.paginate(
-              github.rest.pulls.listFiles,
-              {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: pr.number,
-                per_page: 100
-              }
-            );
-
-            const names = files.map(function (file) {
-              return file.filename;
-            });
-
-            const adrFiles = names.filter(function (name) {
-              return name.startsWith('adr/') && name.endsWith('.md');
-            });
-
-            const adrOnly = names.length > 0 && adrFiles.length === names.length;
-
-            if (!adrOnly) {
-              core.setFailed('PR description must be at least 20 characters. Please describe your changes.');
-              return;
-            }
-
-            const lines = [
-              'This pull request introduces or modifies the following ADR files:',
-              ''
-            ];
-
-            adrFiles.forEach(function (name) {
-              lines.push('- ' + name);
-            });
-
-            lines.push('');
-            lines.push('Auto-generated description to satisfy the repository minimum PR description requirement.');
-
-            await github.rest.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pr.number,
-              body: lines.join('
-')
-            });
-
-            core.info('PR body was auto-filled for an ADR-only pull request.');
+      - name: Validate or auto-fill PR body
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/check-pr-body.js
 
   fork-guard:
     runs-on: ubuntu-latest
