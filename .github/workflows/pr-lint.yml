@@ -61,6 +61,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      body-check:
+    name: PR Body Not Empty
+    # Skip body check for bots, as their body content is dynamically generated
+    if: github.actor != 'dependabot[bot]' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
       - name: Check and Auto-Fill PR Description
         uses: actions/github-script@v7
         with:
