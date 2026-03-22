@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright (C) 2026 infamousrusty
+
 # TagSha Production Docker Compose Stack
 # Prerequisites:
 #   1. Copy .env.example to .env and fill in values
