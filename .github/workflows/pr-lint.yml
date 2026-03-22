@@ -2,21 +2,25 @@ name: PR Validation
 
 # Enforces contribution standards on every pull request:
 #   1. PR title follows Conventional Commits (feat/fix/chore/docs/etc.)
-#   2. PR body is not empty (at least 20 characters), unless auto-filled for ADR-only PRs
+#   2. PR body is not empty (at least 20 characters), unless auto-filled for ADR PRs
 #   3. Forks cannot trigger privileged workflows (security boundary)
 #   4. Skips validation for trusted bot accounts to prevent pipeline lockups
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
 
 concurrency:
   group: pr-lint-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
-  pull-requests: write
   contents: read
+  pull-requests: write
 
 jobs:
   title-lint:
@@ -62,48 +66,58 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const prBody = context.payload.pull_request.body || '';
+            const pr = context.payload.pull_request;
+            const prBody = (pr.body || "").trim();
 
-            if (prBody.trim().length >= 20) {
-              core.info('PR body length is sufficient.');
+            if (prBody.length >= 20) {
+              core.info("PR body length is sufficient.");
               return;
             }
 
-            const { data: files } = await github.rest.pulls.listFiles({
+            const response = await github.rest.pulls.listFiles({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number
+              pull_number: pr.number
             });
 
-            const adrFiles = files
-              .filter(file => file.filename.startsWith('adr/') && file.filename.endsWith('.md'))
-              .map(file => file.filename);
+            const adrFiles = response.data
+              .filter(function (file) {
+                return file.filename.startsWith("adr/") && file.filename.endsWith(".md");
+              })
+              .map(function (file) {
+                return file.filename;
+              });
 
             if (adrFiles.length > 0) {
-              const fileList = adrFiles.map(name => `- `${name}``).join('
-');
+              const fileList = adrFiles
+                .map(function (name) {
+                  return "- `" + name + "`";
+                })
+                .join("
+");
+
               const newBody = [
-                'This pull request introduces or modifies the following Architecture Decision Records (ADRs):',
-                '',
+                "This pull request introduces or modifies the following Architecture Decision Records (ADRs):",
+                "",
                 fileList,
-                '',
-                '*Auto-generated description to meet the repository minimum description requirement.*'
-              ].join('
-');
+                "",
+                "*Auto-generated description to meet the repository minimum description requirement.*"
+              ].join("
+");
 
               await github.rest.pulls.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                pull_number: context.payload.pull_request.number,
+                pull_number: pr.number,
                 body: newBody
               });
 
-              core.info('Successfully updated PR description for ADR pull request.');
+              core.info("Successfully updated PR description for ADR pull request.");
               return;
             }
 
             core.setFailed(
-              'PR description must be at least 20 characters. Please describe your changes.'
+              "PR description must be at least 20 characters. Please describe your changes."
             );
 
   fork-guard:
