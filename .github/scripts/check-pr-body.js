@@ -3,12 +3,12 @@ const fs = require('fs');
 
 function sanitiseString(value) {
   if (typeof value !== 'string') { return ''; }
-  return value.replace(/[^a-zA-Z0-9 _./-]/g, '').trim();
+  return value.replace(/[^-a-zA-Z0-9 _./ ]/g, '').trim();
 }
 
 function sanitiseFilename(value) {
   if (typeof value !== 'string') { return null; }
-  const clean = value.replace(/[^a-zA-Z0-9_./-]/g, '').trim();
+  const clean = value.replace(/[^-a-zA-Z0-9_./]/g, '').trim();
   if (clean.length === 0) { return null; }
   return clean;
 }
