@@ -1,21 +1,14 @@
 name: CodeQL Analysis
 
-# Runs on push/PR to protected branches and on a weekly schedule.
-# Scans Go (backend) and JavaScript/TypeScript (frontend) for security
-# vulnerabilities and coding errors using GitHub's CodeQL engine.
-
 on:
   push:
-    branches: [main, develop]
+    branches:
+      - main
   pull_request:
-    branches: [main, develop]
+    branches:
+      - main
   schedule:
-    # Every Monday at 03:00 UTC — off-peak to minimise billing impact
     - cron: '0 3 * * 1'
-
-concurrency:
-  group: codeql-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -24,36 +17,45 @@ permissions:
 
 jobs:
   analyse:
-    name: CodeQL (${{ matrix.language }})
+    name: Analyse (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
     strategy:
       fail-fast: false
       matrix:
-        language: [go, javascript-typescript]
+        include:
+          - language: go
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Set up Go 1.24
+      - name: Setup Go
         if: matrix.language == 'go'
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
-          cache: false
+          go-version-file: go.mod
+          cache: true
 
       - name: Initialise CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          # Use the security-extended query suite for broader coverage
           queries: security-extended
+          config-file: .github/codeql/codeql-config.yml
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+      - name: Build Go (manual trace)
+        if: matrix.language == 'go'
+        env:
+          CODEQL_EXTRACTOR_GO_BUILD_TRACING: on
+        run: go build ./...
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
           category: /language:${{ matrix.language }}
+          upload: true
