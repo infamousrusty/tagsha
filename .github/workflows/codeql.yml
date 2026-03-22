@@ -58,6 +58,7 @@ jobs:
         if: matrix.language == 'go'
         env:
           CODEQL_EXTRACTOR_GO_BUILD_TRACING: on
+        working-directory: backend
         run: go build ./...
 
       - name: Perform CodeQL Analysis
