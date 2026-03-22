@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: LGPL-3.0-or-later
+# Copyright (C) 2026 infamousrusty
+
 # docker-compose.secure.yml
 # Security hardening overlay — merge on top of docker-compose.yml
 # Usage:

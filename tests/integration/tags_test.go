@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: LGPL-3.0-or-later
+// Copyright (C) 2026 infamousrusty
+
 //go:build integration
 
 // Integration tests require a running stack.
