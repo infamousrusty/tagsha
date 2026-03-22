@@ -1,5 +1,7 @@
 const github = require('@actions/github');
 
+const NEWLINE = String.fromCharCode(10);
+
 async function run() {
   const token = process.env.GITHUB_TOKEN;
   const octokit = github.getOctokit(token);
@@ -54,8 +56,7 @@ async function run() {
     owner: context.repo.owner,
     repo: context.repo.repo,
     pull_number: pr.number,
-    body: lines.join('
-')
+    body: lines.join(NEWLINE)
   });
 
   console.log('PR body auto-filled for ADR-only pull request.');
