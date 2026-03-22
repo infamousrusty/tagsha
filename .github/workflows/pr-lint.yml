@@ -42,7 +42,7 @@ jobs:
             revert
             security
           requireScope: false
-          subjectPattern: ^.{10,100}$
+          subjectPattern: '^.{10,100}$'
           subjectPatternError: |
             PR title subject must be between 10 and 100 characters.
           ignoreLabels: |
@@ -51,104 +51,46 @@ jobs:
             ignore-semantic-pull-request
 
   body-check:
-    name: PR Body Not Empty
+    name: PR Body Check
     if: github.actor != 'dependabot[bot]' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Validate or auto-fill PR body for ADR-only changes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_API_URL: ${{ github.api_url }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-        shell: bash
-        run: |
-          python3 <<'PY'
-          import json
-          import os
-          import sys
-          import urllib.request
-
-          event_path = os.environ["GITHUB_EVENT_PATH"]
-          api_url = os.environ["GITHUB_API_URL"]
-          repository = os.environ["GITHUB_REPOSITORY"]
-          token = os.environ["GITHUB_TOKEN"]
-
-          with open(event_path, "r", encoding="utf-8") as fh:
-              payload = json.load(fh)
-
-          pr = payload["pull_request"]
-          pr_number = pr["number"]
-          pr_body = (pr.get("body") or "").strip()
-
-          if len(pr_body) >= 20:
-              print("PR body length is sufficient.")
-              sys.exit(0)
-
-          owner, repo = repository.split("/", 1)
-
-          def github_request(url, method="GET", body=None):
-              data = None
-              headers = {
-                  "Authorization": f"Bearer {token}",
-                  "Accept": "application/vnd.github+json",
-                  "X-GitHub-Api-Version": "2022-11-28",
-                  "User-Agent": "tagsha-pr-validation"
-              }
-
-              if body is not None:
-                  data = json.dumps(body).encode("utf-8")
-                  headers["Content-Type"] = "application/json"
-
-              req = urllib.request.Request(url, data=data, headers=headers, method=method)
-              with urllib.request.urlopen(req) as resp:
-                  return json.loads(resp.read().decode("utf-8"))
-
-          files = []
-          page = 1
-
-          while True:
-              url = f"{api_url}/repos/{owner}/{repo}/pulls/{pr_number}/files?per_page=100&page={page}"
-              batch = github_request(url)
-              if not batch:
-                  break
-              files.extend(batch)
-              if len(batch) < 100:
-                  break
-              page += 1
-
-          filenames = [item["filename"] for item in files]
-          adr_files = [
-              name for name in filenames
-              if name.startswith("adr/") and name.endswith(".md")
-          ]
-
-          adr_only = bool(filenames) and len(adr_files) == len(filenames)
-
-          if adr_only:
-              lines = [
-                  "This pull request introduces or modifies the following Architecture Decision Records (ADRs):",
-                  ""
-              ]
-              for name in adr_files:
-                  lines.append(f"- `{name}`")
-              lines.extend([
-                  "",
-                  "*Auto-generated description to meet the repository minimum description requirement.*"
-              ])
-              new_body = "
-".join(lines)
-
-              update_url = f"{api_url}/repos/{owner}/{repo}/pulls/{pr_number}"
-              github_request(update_url, method="PATCH", body={"body": new_body})
-
-              print("Auto-filled PR body for ADR-only pull request.")
-              sys.exit(0)
-
-          print("::error::PR description must be at least 20 characters. Please describe your changes.")
-          sys.exit(1)
-          PY
+      - name: Validate or auto-fill PR body for ADR-only PRs
+        uses: actions/github-script@v7
+        with:
+          script: >
+            const pr = context.payload.pull_request;
+            const body = (pr.body || '').trim();
+            if (body.length >= 20) { core.info('PR body length is sufficient.'); return; }
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100
+            });
+            const filenames = files.map(file => file.filename);
+            const adrFiles = filenames.filter(name => name.startsWith('adr/') && name.endsWith('.md'));
+            const adrOnly = filenames.length > 0 && adrFiles.length === filenames.length;
+            if (adrOnly) {
+              const lines = [
+                'This pull request introduces or modifies the following Architecture Decision Records (ADRs):',
+                '',
+                ...adrFiles.map(name => '- `' + name + '`'),
+                '',
+                '*Auto-generated description to meet the repository minimum description requirement.*'
+              ];
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                body: lines.join('
+')
+              });
+              core.info('Auto-filled PR body for ADR-only pull request.');
+              return;
+            }
+            core.setFailed('PR description must be at least 20 characters. Please describe your changes.');
 
   fork-guard:
     name: Fork PR Guard
