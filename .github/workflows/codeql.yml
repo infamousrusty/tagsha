@@ -30,7 +30,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [go, javascript-typescript]
+        include:
+          - language: go
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
 
     steps:
       - name: Checkout
@@ -47,11 +51,15 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          # Use the security-extended query suite for broader coverage
+          build-mode: ${{ matrix.build-mode }}
           queries: security-extended
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+      - name: Build Go
+        if: matrix.language == 'go'
+        env:
+          CODEQL_EXTRACTOR_GO_BUILD_TRACING: on
+        working-directory: backend
+        run: go build ./...
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
