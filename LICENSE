@@ -1,4 +1,4 @@
-Copyright (C) 2026 infamousrusty
+// Copyright (C) 2026 infamousrusty
 
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
@@ -816,3 +816,5 @@ whether future versions of the GNU Lesser General Public License shall
 apply, that proxy's public statement of acceptance of any version is
 permanent authorization for you to choose that version for the
 Library.
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Finfamousrusty%2Ftagsha.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Finfamousrusty%2Ftagsha?ref=badge_shield)
