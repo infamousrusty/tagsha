@@ -15,7 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  pull-requests: read
+  pull-requests: write
+  contents: read
 
 jobs:
   title-lint:
@@ -60,14 +61,54 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check PR body length
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          if [ ${#PR_BODY} -lt 20 ]; then
-            echo "::error::PR description must be at least 20 characters. Please describe your changes."
-            exit 1
-          fi
+      - name: Check and Auto-Fill PR Description
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // 1. Get the current PR body (default to empty string if null)
+            const prBody = context.payload.pull_request.body || '';
+            
+            // 2. If it already meets your 20-character rule, pass immediately
+            if (prBody.length >= 20) {
+              console.log("PR body length is sufficient.");
+              return;
+            }
+            
+            // 3. Fetch the list of changed files in this Pull Request
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            
+            // 4. Check if the PR contains your ADR files
+            const adrFiles = files.filter(f => f.filename.startsWith('adr/') && f.filename.endsWith('.md'));
+            
+            if (adrFiles.length > 0) {
+              console.log("Found ADR files. Auto-generating PR description...");
+              
+              // 5. Build a dynamic markdown list of the changed ADRs
+              const fileList = adrFiles.map(f => `- `${f.filename}``).join('
+');
+              const newBody = `This Pull Request introduces or modifies the following Architecture Decision Records (ADRs):
+
+${fileList}
+
+*Auto-generated description to meet the repository 20-character minimum requirement.*`;
+              
+              // 6. Update the PR body via GitHub API
+              await github.rest.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                body: newBody
+              });
+              
+              console.log("Successfully updated PR description.");
+            } else {
+              // 7. If it's NOT an ADR PR, fail exactly like your old script did
+              core.setFailed("PR description must be at least 20 characters. Please describe your changes.");
+            }
 
   fork-guard:
     name: Fork PR Guard
