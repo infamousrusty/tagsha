@@ -1,14 +1,21 @@
 name: CodeQL Analysis
 
+# Runs on push/PR to protected branches and on a weekly schedule.
+# Scans Go (backend) and JavaScript/TypeScript (frontend) for security
+# vulnerabilities and coding errors using GitHub's CodeQL engine.
+
 on:
   push:
-    branches:
-      - main
+    branches: [main, develop]
   pull_request:
-    branches:
-      - main
+    branches: [main, develop]
   schedule:
+    # Every Monday at 03:00 UTC — off-peak to minimise billing impact
     - cron: '0 3 * * 1'
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -17,26 +24,27 @@ permissions:
 
 jobs:
   analyse:
-    name: Analyse (${{ matrix.language }})
+    name: CodeQL (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Go requires manual build tracing — autobuild silently skips .go files
           - language: go
             build-mode: manual
+          # JavaScript/TypeScript does not require a build step
           - language: javascript-typescript
             build-mode: none
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Setup Go
+      - name: Set up Go 1.24
         if: matrix.language == 'go'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version: '1.24'
           cache: false
@@ -45,8 +53,9 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # Use the security-extended query suite for broader coverage
           queries: security-extended
-          config-file: .github/codeql/codeql-config.yml
 
       - name: Build Go
         if: matrix.language == 'go'
@@ -64,4 +73,3 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: /language:${{ matrix.language }}
-          upload: true
