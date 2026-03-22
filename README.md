@@ -3,6 +3,7 @@
 > Resolve any GitHub repository's version tags to exact, reproducible commit SHAs.
 
 [![Status: Work in Progress](https://img.shields.io/badge/Status-Work_in_Progress-orange.svg)](https://github.com/infamousrusty/tagsha)
+[![GHCR Version](https://ghcr-badge.egpl.dev/infamousrusty/tagsha/latest_tag?color=2496ED&label=version&trim=major)](https://github.com/infamousrusty/tagsha/pkgs/container/tagsha)
 
 [![CI](https://github.com/infamousrusty/tagsha/actions/workflows/ci.yml/badge.svg)](https://github.com/infamousrusty/tagsha/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/infamousrusty/tagsha)](https://goreportcard.com/report/github.com/infamousrusty/tagsha)
