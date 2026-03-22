@@ -1,153 +1,157 @@
-#!/usr/bin/env bash
-set -Eeuo pipefail
+name: Apply License Headers
+run-name: Apply license headers on ${{ github.ref_name }}
 
-YEAR="2026"
-AUTHOR="(infamousrusty)"
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - '**/*.py'
+      - '**/*.sh'
+      - '**/*.yml'
+      - '**/*.yaml'
+      - '**/*.tf'
+      - '**/*.go'
+      - '**/*.js'
+      - '**/*.ts'
+      - '.github/workflows/*.yml'
+      - '.github/workflows/*.yaml'
 
-read -r -d '' HASH_HEADER <<EOF || true
-# SPDX-License-Identifier: GPL-3.0-or-later
-#
-# Copyright (C) $YEAR $AUTHOR
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-EOF
+permissions:
+  contents: write
 
-read -r -d '' SLASH_HEADER <<EOF || true
-// SPDX-License-Identifier: GPL-3.0-or-later
-//
-// Copyright (C) $YEAR $AUTHOR
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
-EOF
+concurrency:
+  group: apply-license-headers-${{ github.ref }}
+  cancel-in-progress: false
 
-hash_exts=(py sh yml yaml tf)
-slash_exts=(go js ts)
+jobs:
+  apply-license-headers:
+    name: Apply SPDX headers
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
 
-tmp_files=()
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
 
-cleanup() {
-    local f
-    for f in "${tmp_files[@]:-}"; do
-        [[ -n "${f:-}" && -e "$f" ]] && rm -f -- "$f"
-    done
-}
-trap cleanup EXIT
+      - name: Apply headers
+        shell: bash
+        run: |
+          set -Eeuo pipefail
 
-build_find_expr() {
-    local -n exts_ref=$1
-    local expr=()
-    local first=1
-    local ext
+          python3 - <<'PY'
+          from __future__ import annotations
 
-    expr+=( "(" )
-    for ext in "${exts_ref[@]}"; do
-        if (( first )); then
-            expr+=( -name "*.${ext}" )
-            first=0
-        else
-            expr+=( -o -name "*.${ext}" )
-        fi
-    done
-    expr+=( ")" )
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
 
-    printf '%s
-' "${expr[@]}"
-}
+          YEAR = str(datetime.now(timezone.utc).year)
+          AUTHOR = "infamousrusty"
 
-add_header() {
-    local file=$1
-    local header_type=$2
-    local tmp_file
-    local first_line
+          HASH_EXTS = {".py", ".sh", ".yml", ".yaml", ".tf"}
+          SLASH_EXTS = {".go", ".js", ".ts"}
+          EXCLUDED_DIRS = {
+              ".git",
+              "node_modules",
+              ".venv",
+              "venv",
+              "dist",
+              "build",
+              "vendor",
+          }
 
-    if grep -q "SPDX-License-Identifier" "$file"; then
-        return 0
-    fi
+          HASH_HEADER = "
+".join(
+              [
+                  "# SPDX-License-Identifier: LGPL-3.0-or-later",
+                  f"# Copyright (C) {YEAR} {AUTHOR}",
+              ]
+          )
 
-    tmp_file="$(mktemp)"
-    tmp_files+=("$tmp_file")
+          SLASH_HEADER = "
+".join(
+              [
+                  "// SPDX-License-Identifier: LGPL-3.0-or-later",
+                  f"// Copyright (C) {YEAR} {AUTHOR}",
+              ]
+          )
 
-    echo "Fixing $file..."
+          changed_files: list[str] = []
 
-    first_line="$(head -n 1 "$file" || true)"
-    if [[ $first_line == '#!'* ]]; then
-        head -n 1 "$file" > "$tmp_file"
-        printf '
-' >> "$tmp_file"
-        if [[ $header_type == "hash" ]]; then
-            printf '%s
-' "$HASH_HEADER" >> "$tmp_file"
-        else
-            printf '%s
-' "$SLASH_HEADER" >> "$tmp_file"
-        fi
-        printf '
-' >> "$tmp_file"
-        tail -n +2 "$file" >> "$tmp_file"
-    else
-        if [[ $header_type == "hash" ]]; then
-            printf '%s
-' "$HASH_HEADER" > "$tmp_file"
-        else
-            printf '%s
-' "$SLASH_HEADER" > "$tmp_file"
-        fi
-        printf '
-' >> "$tmp_file"
-        cat "$file" >> "$tmp_file"
-    fi
+          def should_skip_dir(path: Path) -> bool:
+              return any(part in EXCLUDED_DIRS for part in path.parts)
 
-    mv -- "$tmp_file" "$file"
+          def has_spdx(text: str) -> bool:
+              first_lines = "
+".join(text.splitlines()[:20])
+              return "SPDX-License-Identifier:" in first_lines
 
-    local i
-    for i in "${!tmp_files[@]}"; do
-        if [[ ${tmp_files[$i]} == "$tmp_file" ]]; then
-            unset 'tmp_files[i]'
-            break
-        fi
-    done
-}
+          def apply_header(path: Path, header: str) -> bool:
+              original = path.read_text(encoding="utf-8", errors="surrogateescape")
 
-process_group() {
-    local header_type=$1
-    shift
-    local exts=("$@")
-    local find_expr=()
-    local file
+              if has_spdx(original):
+                  return False
 
-    mapfile -t find_expr < <(build_find_expr exts)
+              lines = original.splitlines(keepends=True)
 
-    find . -type f \
-        ( "${find_expr[@]:1:${#find_expr[@]}-2}" ) \
-        -not -path '*/.*' \
-        -not -path '*/node_modules/*' \
-        -print0 |
-    while IFS= read -r -d '' file; do
-        add_header "$file" "$header_type"
-    done
-}
+              if lines and lines[0].startswith("#!"):
+                  shebang = lines[0]
+                  rest = "".join(lines[1:])
+                  new_content = f"{shebang}
+{header}
 
-process_group "hash"  "${hash_exts[@]}"
-process_group "slash" "${slash_exts[@]}"
+{rest}"
+              else:
+                  new_content = f"{header}
+
+{original}"
+
+              if new_content == original:
+                  return False
+
+              path.write_text(new_content, encoding="utf-8", errors="surrogateescape")
+              return True
+
+          for path in Path(".").rglob("*"):
+              if not path.is_file() or path.is_symlink():
+                  continue
+
+              if should_skip_dir(path):
+                  continue
+
+              suffix = path.suffix.lower()
+
+              if suffix in HASH_EXTS:
+                  if apply_header(path, HASH_HEADER):
+                      changed_files.append(path.as_posix())
+              elif suffix in SLASH_EXTS:
+                  if apply_header(path, SLASH_HEADER):
+                      changed_files.append(path.as_posix())
+
+          if changed_files:
+              print("Updated files:")
+              for file in changed_files:
+                  print(file)
+          else:
+              print("No files needed updates.")
+          PY
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+          git commit -m "chore(license): apply SPDX headers [skip ci]"
+          git push
