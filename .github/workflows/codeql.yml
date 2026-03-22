@@ -31,10 +31,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Go requires manual build tracing — autobuild silently skips .go files
           - language: go
             build-mode: manual
-          # JavaScript/TypeScript does not require a build step
           - language: javascript-typescript
             build-mode: none
 
@@ -54,20 +52,13 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
-          # Use the security-extended query suite for broader coverage
           queries: security-extended
 
       - name: Build Go
         if: matrix.language == 'go'
         env:
           CODEQL_EXTRACTOR_GO_BUILD_TRACING: on
-        run: |
-          if [ -f go.mod ]; then
-            go build ./...
-          else
-            go build $(find . -name '*.go' -not -path './vendor/*' | xargs dirname | sort -u | tr '
-' ' ')
-          fi
+        run: go build ./...
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
