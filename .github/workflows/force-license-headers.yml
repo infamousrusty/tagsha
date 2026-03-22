@@ -2,7 +2,7 @@ name: Apply License Headers
 run-name: Apply license headers
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -45,8 +45,8 @@ jobs:
           echo "// Copyright (C) $YEAR $AUTHOR" >> "$SLASH_TMP"
           echo "" >> "$SLASH_TMP"
 
-          # 3. Process Hash-style extensions safely
-          find . -type f ( -name "*.py" -o -name "*.sh" -o -name "*.yml" -o -name "*.yaml" -o -name "*.tf" ) \
+          # 3. Process Hash-style extensions safely using quoted parentheses
+          find . -type f "(" -name "*.py" -o -name "*.sh" -o -name "*.yml" -o -name "*.yaml" -o -name "*.tf" ")" \
             -not -path '*/.*' -not -path '*/node_modules/*' -print0 | \
           while IFS= read -r -d '' file; do
             if grep -q "SPDX-License-Identifier" "$file"; then
@@ -70,8 +70,8 @@ jobs:
             mv "$tmp_file" "$file"
           done
 
-          # 4. Process Slash-style extensions safely
-          find . -type f ( -name "*.go" -o -name "*.js" -o -name "*.ts" ) \
+          # 4. Process Slash-style extensions safely using quoted parentheses
+          find . -type f "(" -name "*.go" -o -name "*.js" -o -name "*.ts" ")" \
             -not -path '*/.*' -not -path '*/node_modules/*' -print0 | \
           while IFS= read -r -d '' file; do
             if grep -q "SPDX-License-Identifier" "$file"; then
