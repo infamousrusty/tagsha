@@ -8,17 +8,16 @@ on:
       - synchronize
       - reopened
 
-concurrency:
-  group: pr-lint-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
   pull-requests: write
 
+concurrency:
+  group: pr-lint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   title-lint:
-    name: Conventional Commit Title
     if: github.actor != 'dependabot[bot]' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -43,61 +42,80 @@ jobs:
             security
           requireScope: false
           subjectPattern: '^.{10,100}$'
-          subjectPatternError: |
-            PR title subject must be between 10 and 100 characters.
+          subjectPatternError: 'PR title subject must be between 10 and 100 characters.'
           ignoreLabels: |
             bot
             dependabot
             ignore-semantic-pull-request
 
   body-check:
-    name: PR Body Check
     if: github.actor != 'dependabot[bot]' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Validate or auto-fill PR body for ADR-only PRs
+      - name: Validate or update PR body
         uses: actions/github-script@v7
         with:
-          script: >
+          script: |
             const pr = context.payload.pull_request;
             const body = (pr.body || '').trim();
-            if (body.length >= 20) { core.info('PR body length is sufficient.'); return; }
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: pr.number,
-              per_page: 100
-            });
-            const filenames = files.map(file => file.filename);
-            const adrFiles = filenames.filter(name => name.startsWith('adr/') && name.endsWith('.md'));
-            const adrOnly = filenames.length > 0 && adrFiles.length === filenames.length;
-            if (adrOnly) {
-              const lines = [
-                'This pull request introduces or modifies the following Architecture Decision Records (ADRs):',
-                '',
-                ...adrFiles.map(name => '- `' + name + '`'),
-                '',
-                '*Auto-generated description to meet the repository minimum description requirement.*'
-              ];
-              await github.rest.pulls.update({
+
+            if (body.length >= 20) {
+              core.info('PR body is valid.');
+              return;
+            }
+
+            const files = await github.paginate(
+              github.rest.pulls.listFiles,
+              {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: pr.number,
-                body: lines.join('
-')
-              });
-              core.info('Auto-filled PR body for ADR-only pull request.');
+                per_page: 100
+              }
+            );
+
+            const names = files.map(function (file) {
+              return file.filename;
+            });
+
+            const adrFiles = names.filter(function (name) {
+              return name.startsWith('adr/') && name.endsWith('.md');
+            });
+
+            const adrOnly = names.length > 0 && adrFiles.length === names.length;
+
+            if (!adrOnly) {
+              core.setFailed('PR description must be at least 20 characters. Please describe your changes.');
               return;
             }
-            core.setFailed('PR description must be at least 20 characters. Please describe your changes.');
+
+            const lines = [
+              'This pull request introduces or modifies the following ADR files:',
+              ''
+            ];
+
+            adrFiles.forEach(function (name) {
+              lines.push('- ' + name);
+            });
+
+            lines.push('');
+            lines.push('Auto-generated description to satisfy the repository minimum PR description requirement.');
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              body: lines.join('
+')
+            });
+
+            core.info('PR body was auto-filled for an ADR-only pull request.');
 
   fork-guard:
-    name: Fork PR Guard
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Warn on fork pull requests
+      - name: Warn for fork PRs
         if: github.event.pull_request.head.repo.fork == true
-        run: |
-          echo "::warning::This PR originates from a fork. Privileged secrets are not available and privileged release actions should be skipped."
+        run: echo "::warning::This pull request originates from a fork. Privileged secrets are not available."
