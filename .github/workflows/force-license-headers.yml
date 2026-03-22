@@ -1,21 +1,12 @@
 name: Apply License Headers
-run-name: Apply license headers on ${{ github.ref_name }}
+run-name: Apply license headers
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
   push:
     branches:
       - main
-      - master
-    paths:
-      - '**/*.py'
-      - '**/*.sh'
-      - '**/*.yml'
-      - '**/*.yaml'
-      - '**/*.tf'
-      - '**/*.go'
-      - '**/*.js'
-      - '**/*.ts'
+      - develop
 
 permissions:
   contents: write
@@ -27,8 +18,7 @@ concurrency:
 jobs:
   apply-license-headers:
     name: Apply SPDX headers
-    # Wrapped in ${{ }} to prevent YAML string parsing errors
-    if: ${{ github.actor != 'github-actions[bot]' }}
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:
@@ -43,129 +33,68 @@ jobs:
           YEAR="$(date +%Y)"
           AUTHOR="infamousrusty"
 
-          read -r -d '' HASH_HEADER <<EOF || true
-          # SPDX-License-Identifier: LGPL-3.0-or-later
-          # Copyright (C) $YEAR $AUTHOR
-          EOF
+          # 1. Create the Hash-style header block (Python, Shell, YAML, TF)
+          HASH_TMP="$(mktemp)"
+          echo "# SPDX-License-Identifier: LGPL-3.0-or-later" > "$HASH_TMP"
+          echo "# Copyright (C) $YEAR $AUTHOR" >> "$HASH_TMP"
+          echo "" >> "$HASH_TMP"
 
-          read -r -d '' SLASH_HEADER <<EOF || true
-          // SPDX-License-Identifier: LGPL-3.0-or-later
-          // Copyright (C) $YEAR $AUTHOR
-          EOF
+          # 2. Create the Slash-style header block (Go, JS, TS)
+          SLASH_TMP="$(mktemp)"
+          echo "// SPDX-License-Identifier: LGPL-3.0-or-later" > "$SLASH_TMP"
+          echo "// Copyright (C) $YEAR $AUTHOR" >> "$SLASH_TMP"
+          echo "" >> "$SLASH_TMP"
 
-          hash_exts=(py sh yml yaml tf)
-          slash_exts=(go js ts)
+          # 3. Process Hash-style extensions safely
+          find . -type f ( -name "*.py" -o -name "*.sh" -o -name "*.yml" -o -name "*.yaml" -o -name "*.tf" ) \
+            -not -path '*/.*' -not -path '*/node_modules/*' -print0 | \
+          while IFS= read -r -d '' file; do
+            if grep -q "SPDX-License-Identifier" "$file"; then
+              continue
+            fi
+            
+            first_line="$(head -n 1 "$file" || true)"
+            tmp_file="$(mktemp)"
+            
+            # Check for shebang safely
+            if echo "$first_line" | grep -q "^#!"; then
+              head -n 1 "$file" > "$tmp_file"
+              echo "" >> "$tmp_file"
+              cat "$HASH_TMP" >> "$tmp_file"
+              tail -n +2 "$file" >> "$tmp_file"
+            else
+              cat "$HASH_TMP" > "$tmp_file"
+              cat "$file" >> "$tmp_file"
+            fi
+            
+            mv "$tmp_file" "$file"
+          done
 
-          tmp_files=()
-
-          cleanup() {
-              local f
-              for f in "${tmp_files[@]:-}"; do
-                  [[ -n "${f:-}" && -e "$f" ]] && rm -f -- "$f"
-              done
-          }
-          trap cleanup EXIT
-
-          build_find_expr() {
-              local -n exts_ref=$1
-              local expr=()
-              local first=1
-              local ext
-
-              expr+=( "(" )
-              for ext in "${exts_ref[@]}"; do
-                  if (( first )); then
-                      expr+=( -name "*.$ext" )
-                      first=0
-                  else
-                      expr+=( -o -name "*.$ext" )
-                  fi
-              done
-              expr+=( ")" )
-
-              printf '%s
-' "${expr[@]}"
-          }
-
-          add_header() {
-              local file=$1
-              local header_type=$2
-              local tmp_file
-              local first_line
-
-              if grep -q "SPDX-License-Identifier" "$file"; then
-                  return 0
-              fi
-
-              tmp_file="$(mktemp)"
-              tmp_files+=("$tmp_file")
-
-              first_line="$(head -n 1 "$file" || true)"
-              if [[ $first_line == '#!'* ]]; then
-                  head -n 1 "$file" > "$tmp_file"
-                  printf '
-' >> "$tmp_file"
-                  if [[ $header_type == "hash" ]]; then
-                      printf '%s
-' "$HASH_HEADER" >> "$tmp_file"
-                  else
-                      printf '%s
-' "$SLASH_HEADER" >> "$tmp_file"
-                  fi
-                  printf '
-' >> "$tmp_file"
-                  tail -n +2 "$file" >> "$tmp_file"
-              else
-                  if [[ $header_type == "hash" ]]; then
-                      printf '%s
-' "$HASH_HEADER" > "$tmp_file"
-                  else
-                      printf '%s
-' "$SLASH_HEADER" > "$tmp_file"
-                  fi
-                  printf '
-' >> "$tmp_file"
-                  cat "$file" >> "$tmp_file"
-              fi
-
-              mv -- "$tmp_file" "$file"
-          }
-
-          process_group() {
-              local header_type=$1
-              shift
-              local exts=("$@")
-              local find_expr=()
-              local file
-
-              mapfile -t find_expr < <(build_find_expr exts)
-
-              find . -type f \
-                  ( "${find_expr[@]:1:${#find_expr[@]}-2}" ) \
-                  -not -path '*/.*' \
-                  -not -path '*/node_modules/*' \
-                  -print0 |
-              while IFS= read -r -d '' file; do
-                  add_header "$file" "$header_type"
-              done
-          }
-
-          process_group "hash"  "${hash_exts[@]}"
-          process_group "slash" "${slash_exts[@]}"
+          # 4. Process Slash-style extensions safely
+          find . -type f ( -name "*.go" -o -name "*.js" -o -name "*.ts" ) \
+            -not -path '*/.*' -not -path '*/node_modules/*' -print0 | \
+          while IFS= read -r -d '' file; do
+            if grep -q "SPDX-License-Identifier" "$file"; then
+              continue
+            fi
+            
+            tmp_file="$(mktemp)"
+            cat "$SLASH_TMP" > "$tmp_file"
+            cat "$file" >> "$tmp_file"
+            mv "$tmp_file" "$file"
+          done
 
       - name: Commit changes
         shell: bash
         run: |
-          set -Eeuo pipefail
-
           if git diff --quiet; then
             echo "No changes to commit."
             exit 0
           fi
-
+          
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
+          
           git add -A
           git commit -m "chore(license): apply SPDX headers [skip ci]"
           git push
