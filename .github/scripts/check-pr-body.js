@@ -1,34 +1,80 @@
-const github = require('@actions/github');
+const https = require('https');
+const fs = require('fs');
 
 const NEWLINE = String.fromCharCode(10);
 
-async function run() {
-  const token = process.env.GITHUB_TOKEN;
-  const octokit = github.getOctokit(token);
-  const context = github.context;
+function apiRequest(method, path, body) {
+  return new Promise(function (resolve, reject) {
+    const data = body ? JSON.stringify(body) : null;
+    const options = {
+      hostname: 'api.github.com',
+      path: path,
+      method: method,
+      headers: {
+        'Authorization': 'Bearer ' + process.env.GITHUB_TOKEN,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'tagsha-pr-validation',
+        'Content-Type': 'application/json'
+      }
+    };
 
-  const pr = context.payload.pull_request;
-  const body = (pr.body || '').trim();
+    if (data) {
+      options.headers['Content-Length'] = Buffer.byteLength(data);
+    }
 
-  if (body.length >= 20) {
-    console.log('PR body is valid.');
-    return;
+    const req = https.request(options, function (res) {
+      let raw = '';
+      res.on('data', function (chunk) { raw += chunk; });
+      res.on('end', function () {
+        try { resolve(JSON.parse(raw)); }
+        catch (e) { resolve({}); }
+      });
+    });
+
+    req.on('error', reject);
+    if (data) { req.write(data); }
+    req.end();
+  });
+}
+
+async function getFiles(owner, repo, prNumber) {
+  const results = [];
+  let page = 1;
+
+  while (true) {
+    const path = '/repos/' + owner + '/' + repo + '/pulls/' + prNumber + '/files?per_page=100&page=' + page;
+    const batch = await apiRequest('GET', path, null);
+    if (!Array.isArray(batch) || batch.length === 0) { break; }
+    results.push.apply(results, batch);
+    if (batch.length < 100) { break; }
+    page++;
   }
 
-  const files = await octokit.paginate(
-    octokit.rest.pulls.listFiles,
-    {
-      owner: context.repo.owner,
-      repo: context.repo.repo,
-      pull_number: pr.number,
-      per_page: 100
-    }
-  );
+  return results;
+}
 
-  const names = files.map(function (file) {
-    return file.filename;
-  });
+async function updatePrBody(owner, repo, prNumber, newBody) {
+  const path = '/repos/' + owner + '/' + repo + '/pulls/' + prNumber;
+  await apiRequest('PATCH', path, { body: newBody });
+}
 
+async function run() {
+  const payload = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+  const pr = payload.pull_request;
+  const prBody = (pr.body || '').trim();
+  const prNumber = pr.number;
+  const repoParts = process.env.GITHUB_REPOSITORY.split('/');
+  const owner = repoParts[0];
+  const repo = repoParts[1];
+
+  if (prBody.length >= 20) {
+    console.log('PR body is valid.');
+    process.exit(0);
+  }
+
+  const files = await getFiles(owner, repo, prNumber);
+  const names = files.map(function (file) { return file.filename; });
   const adrFiles = names.filter(function (name) {
     return name.startsWith('adr/') && name.endsWith('.md');
   });
@@ -36,7 +82,7 @@ async function run() {
   const adrOnly = names.length > 0 && adrFiles.length === names.length;
 
   if (!adrOnly) {
-    console.error('::error::PR description must be at least 20 characters. Please describe your changes.');
+    console.log('::error::PR description must be at least 20 characters. Please describe your changes.');
     process.exit(1);
   }
 
@@ -45,21 +91,13 @@ async function run() {
     ''
   ];
 
-  adrFiles.forEach(function (name) {
-    lines.push('- ' + name);
-  });
-
+  adrFiles.forEach(function (name) { lines.push('- ' + name); });
   lines.push('');
   lines.push('Auto-generated description to satisfy the repository minimum PR description requirement.');
 
-  await octokit.rest.pulls.update({
-    owner: context.repo.owner,
-    repo: context.repo.repo,
-    pull_number: pr.number,
-    body: lines.join(NEWLINE)
-  });
-
+  await updatePrBody(owner, repo, prNumber, lines.join(NEWLINE));
   console.log('PR body auto-filled for ADR-only pull request.');
+  process.exit(0);
 }
 
 run();
