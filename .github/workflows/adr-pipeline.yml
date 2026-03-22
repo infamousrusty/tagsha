@@ -38,15 +38,31 @@ jobs:
 
       - name: Enforce LGPL and GDPR Sections
         run: |
-          for file in $(find adr/ -name '*.md' -not -name 'README.md' -not -name 'template.md'); do
+          # 1. Check if the directory exists first
+          if [ ! -d "adr/" ]; then
+            echo "Directory adr/ does not exist. Skipping compliance checks."
+            exit 0
+          fi
+
+          echo "Scanning ADRs for compliance sections..."
+          
+          # 2. Use a while read loop to safely handle spaces in filenames
+          find adr/ -type f -name '*.md' -not -name 'README.md' -not -name 'template.md' | while read -r file; do
+            echo "Checking: $file"
+            
+            # 3. Check for LGPL section
             if ! grep -qi "LGPL-3.0-or-later Evaluation" "$file"; then
               echo "::error file=$file::Missing LGPL-3.0-or-later compliance evaluation."
               exit 1
             fi
+            
+            # 4. Check for GDPR section
             if ! grep -qi "GDPR & PII Evaluation" "$file"; then
               echo "::error file=$file::Missing GDPR/PII compliance evaluation."
               exit 1
             fi
+            
+            echo "  -> Passed compliance check!"
           done
         shell: bash
 
