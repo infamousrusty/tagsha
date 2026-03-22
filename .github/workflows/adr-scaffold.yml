@@ -1,0 +1,91 @@
+name: Scaffold ADR Pull Request
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  generate-adr:
+    if: contains(github.event.issue.labels.*.name, 'adr-proposal')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Formatters and Linters
+        run: npm install -g prettier markdownlint-cli cspell
+
+      - name: Generate ADR Markdown
+        uses: actions/github-script@v7
+        env:
+          TITLE: ${{ github.event.issue.title }}
+          BODY: ${{ github.event.issue.body }}
+          AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_NO: ${{ github.event.issue.number }}
+        with:
+          script: |
+            const fs = require('fs');
+            const { TITLE, BODY, AUTHOR, ISSUE_NO } = process.env;
+            
+            const date = new Date().toISOString().split('T')[0];
+            const cleanTitle = TITLE.replace('[ADR]:', '').trim();
+            const slug = cleanTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+            const filename = `adr/${ISSUE_NO.padStart(4, '0')}-${slug}.md`;
+            
+            // Reformat Issue Form headings (###) to standard ADR headings (##)
+            const formattedBody = BODY.replace(/^### /gm, '## ');
+            
+            const content = `# ADR ${ISSUE_NO}: ${cleanTitle}
+
+            **Date:** ${date}
+            **Status:** Proposed
+            **Author(s):** @${AUTHOR}
+            
+            ${formattedBody}
+            
+            ---
+            *Copyright © ${new Date().getFullYear()} Anton-Curtis Cooper (infamousrusty). This documentation is distributed under the terms of the GNU Lesser General Public License v3.0 or later.*`;
+            
+            fs.mkdirSync('adr', { recursive: true });
+            fs.writeFileSync(filename, content);
+
+      - name: Lint and Format File
+        run: |
+          # Auto-fix markdown issues where possible
+          markdownlint --fix "adr/*.md" || true
+          
+          # Enforce Prettier formatting
+          prettier --write "adr/*.md"
+        shell: bash
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          branch: adr-proposal-${{ github.event.issue.number }}
+          commit-message: "docs(adr): auto-generate ADR from issue #${{ github.event.issue.number }}"
+          title: "docs(adr): ${{ github.event.issue.title }}"
+          body: "Automatically generated ADR from Issue #${{ github.event.issue.number }}. Ready for review."
+          labels: "architecture"
+          delete-branch: true
+
+      - name: Close Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed',
+              state_reason: 'completed'
+            });
