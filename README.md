@@ -11,6 +11,7 @@
 [![Repo Size](https://img.shields.io/github/repo-size/infamousrusty/tagsha)](https://github.com/infamousrusty/tagsha)
 
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Finfamousrusty%2Ftagsha.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Finfamousrusty%2Ftagsha?ref=badge_shield)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Finfamousrusty%2Ftagsha.svg?type=shield&issueType=security)](https://app.fossa.com/projects/git%2Bgithub.com%2Finfamousrusty%2Ftagsha?ref=badge_shield&issueType=security)
 
 ---
 
