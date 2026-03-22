@@ -1,122 +1,153 @@
-name: Force Apply License Headers
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-on:
-  workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch to analyze and apply headers to'
-        required: true
-        default: 'main'
+YEAR="2026"
+AUTHOR="(infamousrusty)"
 
-# Grant the default GITHUB_TOKEN permission to push commits
-permissions:
-  contents: write
+read -r -d '' HASH_HEADER <<EOF || true
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Copyright (C) $YEAR $AUTHOR
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+EOF
 
-jobs:
-  enforce-headers:
-    name: Analyze and Apply Headers
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.branch }}
+read -r -d '' SLASH_HEADER <<EOF || true
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Copyright (C) $YEAR $AUTHOR
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+EOF
 
-      - name: Inject Missing SPDX Headers
-        run: |
-          YEAR="2026"
-          AUTHOR="Anton-Curtis Cooper (infamousrusty)"
+hash_exts=(py sh yml yaml tf)
+slash_exts=(go js ts)
 
-          # Define the comment blocks
-          read -r -d '' HASH_HEADER << EOF || true
-          # SPDX-License-Identifier: GPL-3.0-or-later
-          #
-          # Copyright (C) $YEAR $AUTHOR
-          #
-          # This program is free software: you can redistribute it and/or modify
-          # it under the terms of the GNU General Public License as published by
-          # the Free Software Foundation, either version 3 of the License, or
-          # (at your option) any later version.
-          #
-          # This program is distributed in the hope that it will be useful,
-          # but WITHOUT ANY WARRANTY; without even the implied warranty of
-          # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-          # GNU General Public License for more details.
-          #
-          # You should have received a copy of the GNU General Public License
-          # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-          EOF
+tmp_files=()
 
-          read -r -d '' SLASH_HEADER << EOF || true
-          // SPDX-License-Identifier: GPL-3.0-or-later
-          //
-          // Copyright (C) $YEAR $AUTHOR
-          //
-          // This program is free software: you can redistribute it and/or modify
-          // it under the terms of the GNU General Public License as published by
-          // the Free Software Foundation, either version 3 of the License, or
-          // (at your option) any later version.
-          //
-          // This program is distributed in the hope that it will be useful,
-          // but WITHOUT ANY WARRANTY; without even the implied warranty of
-          // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-          // GNU General Public License for more details.
-          //
-          // You should have received a copy of the GNU General Public License
-          // along with this program.  If not, see <https://www.gnu.org/licenses/>.
-          EOF
+cleanup() {
+    local f
+    for f in "${tmp_files[@]:-}"; do
+        [[ -n "${f:-}" && -e "$f" ]] && rm -f -- "$f"
+    done
+}
+trap cleanup EXIT
 
-          add_header() {
-              local file=$1
-              local header_type=$2
-              local tmp_file=$(mktemp)
+build_find_expr() {
+    local -n exts_ref=$1
+    local expr=()
+    local first=1
+    local ext
 
-              # Skip if file already has SPDX identifier
-              if grep -q "SPDX-License-Identifier" "$file"; then
-                  return
-              fi
+    expr+=( "(" )
+    for ext in "${exts_ref[@]}"; do
+        if (( first )); then
+            expr+=( -name "*.${ext}" )
+            first=0
+        else
+            expr+=( -o -name "*.${ext}" )
+        fi
+    done
+    expr+=( ")" )
 
-              echo "Fixing $file..."
+    printf '%s
+' "${expr[@]}"
+}
 
-              first_line=$(head -n 1 "$file" || true)
-              if [[ $first_line == "#!"* ]]; then
-                  head -n 1 "$file" > "$tmp_file"
-                  echo "" >> "$tmp_file"
-                  [ "$header_type" == "hash" ] && echo "$HASH_HEADER" >> "$tmp_file" || echo "$SLASH_HEADER" >> "$tmp_file"
-                  echo "" >> "$tmp_file"
-                  tail -n +2 "$file" >> "$tmp_file"
-              else
-                  [ "$header_type" == "hash" ] && echo "$HASH_HEADER" > "$tmp_file" || echo "$SLASH_HEADER" > "$tmp_file"
-                  echo "" >> "$tmp_file"
-                  cat "$file" >> "$tmp_file"
-              fi
+add_header() {
+    local file=$1
+    local header_type=$2
+    local tmp_file
+    local first_line
 
-              mv "$tmp_file" "$file"
-          }
+    if grep -q "SPDX-License-Identifier" "$file"; then
+        return 0
+    fi
 
-          # Target Scripting & Config files
-          find . -type f ( -name "*.py" -o -name "*.sh" -o -name "*.yml" -o -name "*.yaml" -o -name "*.tf" ) -not -path "*/.*" | while read -r file; do
-              add_header "$file" "hash"
-          done
+    tmp_file="$(mktemp)"
+    tmp_files+=("$tmp_file")
 
-          # Target C-Style Languages
-          find . -type f ( -name "*.go" -o -name "*.js" -o -name "*.ts" ) -not -path "*/.*" -not -path "*/node_modules/*" | while read -r file; do
-              add_header "$file" "slash"
-          done
+    echo "Fixing $file..."
 
-      - name: Commit and Push Changes
-        run: |
-          # Configure official GitHub Actions bot identity
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
-          # Check if there are any changes to commit
-          if [[ -z $(git status --porcelain) ]]; then
-            echo "All files already have correct headers. Nothing to commit."
-            exit 0
-          fi
-          
-          # Stage and commit the modified files
-          git add -u
-          git commit -m "chore(license): forcefully enforce GPL-3.0-or-later SPDX headers [skip ci]"
-          git push origin ${{ github.event.inputs.branch }}
+    first_line="$(head -n 1 "$file" || true)"
+    if [[ $first_line == '#!'* ]]; then
+        head -n 1 "$file" > "$tmp_file"
+        printf '
+' >> "$tmp_file"
+        if [[ $header_type == "hash" ]]; then
+            printf '%s
+' "$HASH_HEADER" >> "$tmp_file"
+        else
+            printf '%s
+' "$SLASH_HEADER" >> "$tmp_file"
+        fi
+        printf '
+' >> "$tmp_file"
+        tail -n +2 "$file" >> "$tmp_file"
+    else
+        if [[ $header_type == "hash" ]]; then
+            printf '%s
+' "$HASH_HEADER" > "$tmp_file"
+        else
+            printf '%s
+' "$SLASH_HEADER" > "$tmp_file"
+        fi
+        printf '
+' >> "$tmp_file"
+        cat "$file" >> "$tmp_file"
+    fi
+
+    mv -- "$tmp_file" "$file"
+
+    local i
+    for i in "${!tmp_files[@]}"; do
+        if [[ ${tmp_files[$i]} == "$tmp_file" ]]; then
+            unset 'tmp_files[i]'
+            break
+        fi
+    done
+}
+
+process_group() {
+    local header_type=$1
+    shift
+    local exts=("$@")
+    local find_expr=()
+    local file
+
+    mapfile -t find_expr < <(build_find_expr exts)
+
+    find . -type f \
+        ( "${find_expr[@]:1:${#find_expr[@]}-2}" ) \
+        -not -path '*/.*' \
+        -not -path '*/node_modules/*' \
+        -print0 |
+    while IFS= read -r -d '' file; do
+        add_header "$file" "$header_type"
+    done
+}
+
+process_group "hash"  "${hash_exts[@]}"
+process_group "slash" "${slash_exts[@]}"
