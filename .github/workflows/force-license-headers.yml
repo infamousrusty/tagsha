@@ -16,8 +16,6 @@ on:
       - '**/*.go'
       - '**/*.js'
       - '**/*.ts'
-      - '.github/workflows/*.yml'
-      - '.github/workflows/*.yaml'
 
 permissions:
   contents: write
@@ -29,115 +27,131 @@ concurrency:
 jobs:
   apply-license-headers:
     name: Apply SPDX headers
-    if: github.actor != 'github-actions[bot]'
+    # Wrapped in ${{ }} to prevent YAML string parsing errors
+    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Apply headers
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          python3 - <<'PY'
-          from __future__ import annotations
+          YEAR="$(date +%Y)"
+          AUTHOR="infamousrusty"
 
-          import os
-          from datetime import datetime, timezone
-          from pathlib import Path
+          read -r -d '' HASH_HEADER <<EOF || true
+          # SPDX-License-Identifier: LGPL-3.0-or-later
+          # Copyright (C) $YEAR $AUTHOR
+          EOF
 
-          YEAR = str(datetime.now(timezone.utc).year)
-          AUTHOR = "infamousrusty"
+          read -r -d '' SLASH_HEADER <<EOF || true
+          // SPDX-License-Identifier: LGPL-3.0-or-later
+          // Copyright (C) $YEAR $AUTHOR
+          EOF
 
-          HASH_EXTS = {".py", ".sh", ".yml", ".yaml", ".tf"}
-          SLASH_EXTS = {".go", ".js", ".ts"}
-          EXCLUDED_DIRS = {
-              ".git",
-              "node_modules",
-              ".venv",
-              "venv",
-              "dist",
-              "build",
-              "vendor",
+          hash_exts=(py sh yml yaml tf)
+          slash_exts=(go js ts)
+
+          tmp_files=()
+
+          cleanup() {
+              local f
+              for f in "${tmp_files[@]:-}"; do
+                  [[ -n "${f:-}" && -e "$f" ]] && rm -f -- "$f"
+              done
+          }
+          trap cleanup EXIT
+
+          build_find_expr() {
+              local -n exts_ref=$1
+              local expr=()
+              local first=1
+              local ext
+
+              expr+=( "(" )
+              for ext in "${exts_ref[@]}"; do
+                  if (( first )); then
+                      expr+=( -name "*.$ext" )
+                      first=0
+                  else
+                      expr+=( -o -name "*.$ext" )
+                  fi
+              done
+              expr+=( ")" )
+
+              printf '%s
+' "${expr[@]}"
           }
 
-          HASH_HEADER = "
-".join(
-              [
-                  "# SPDX-License-Identifier: LGPL-3.0-or-later",
-                  f"# Copyright (C) {YEAR} {AUTHOR}",
-              ]
-          )
+          add_header() {
+              local file=$1
+              local header_type=$2
+              local tmp_file
+              local first_line
 
-          SLASH_HEADER = "
-".join(
-              [
-                  "// SPDX-License-Identifier: LGPL-3.0-or-later",
-                  f"// Copyright (C) {YEAR} {AUTHOR}",
-              ]
-          )
+              if grep -q "SPDX-License-Identifier" "$file"; then
+                  return 0
+              fi
 
-          changed_files: list[str] = []
+              tmp_file="$(mktemp)"
+              tmp_files+=("$tmp_file")
 
-          def should_skip_dir(path: Path) -> bool:
-              return any(part in EXCLUDED_DIRS for part in path.parts)
+              first_line="$(head -n 1 "$file" || true)"
+              if [[ $first_line == '#!'* ]]; then
+                  head -n 1 "$file" > "$tmp_file"
+                  printf '
+' >> "$tmp_file"
+                  if [[ $header_type == "hash" ]]; then
+                      printf '%s
+' "$HASH_HEADER" >> "$tmp_file"
+                  else
+                      printf '%s
+' "$SLASH_HEADER" >> "$tmp_file"
+                  fi
+                  printf '
+' >> "$tmp_file"
+                  tail -n +2 "$file" >> "$tmp_file"
+              else
+                  if [[ $header_type == "hash" ]]; then
+                      printf '%s
+' "$HASH_HEADER" > "$tmp_file"
+                  else
+                      printf '%s
+' "$SLASH_HEADER" > "$tmp_file"
+                  fi
+                  printf '
+' >> "$tmp_file"
+                  cat "$file" >> "$tmp_file"
+              fi
 
-          def has_spdx(text: str) -> bool:
-              first_lines = "
-".join(text.splitlines()[:20])
-              return "SPDX-License-Identifier:" in first_lines
+              mv -- "$tmp_file" "$file"
+          }
 
-          def apply_header(path: Path, header: str) -> bool:
-              original = path.read_text(encoding="utf-8", errors="surrogateescape")
+          process_group() {
+              local header_type=$1
+              shift
+              local exts=("$@")
+              local find_expr=()
+              local file
 
-              if has_spdx(original):
-                  return False
+              mapfile -t find_expr < <(build_find_expr exts)
 
-              lines = original.splitlines(keepends=True)
+              find . -type f \
+                  ( "${find_expr[@]:1:${#find_expr[@]}-2}" ) \
+                  -not -path '*/.*' \
+                  -not -path '*/node_modules/*' \
+                  -print0 |
+              while IFS= read -r -d '' file; do
+                  add_header "$file" "$header_type"
+              done
+          }
 
-              if lines and lines[0].startswith("#!"):
-                  shebang = lines[0]
-                  rest = "".join(lines[1:])
-                  new_content = f"{shebang}
-{header}
-
-{rest}"
-              else:
-                  new_content = f"{header}
-
-{original}"
-
-              if new_content == original:
-                  return False
-
-              path.write_text(new_content, encoding="utf-8", errors="surrogateescape")
-              return True
-
-          for path in Path(".").rglob("*"):
-              if not path.is_file() or path.is_symlink():
-                  continue
-
-              if should_skip_dir(path):
-                  continue
-
-              suffix = path.suffix.lower()
-
-              if suffix in HASH_EXTS:
-                  if apply_header(path, HASH_HEADER):
-                      changed_files.append(path.as_posix())
-              elif suffix in SLASH_EXTS:
-                  if apply_header(path, SLASH_HEADER):
-                      changed_files.append(path.as_posix())
-
-          if changed_files:
-              print("Updated files:")
-              for file in changed_files:
-                  print(file)
-          else:
-              print("No files needed updates.")
-          PY
+          process_group "hash"  "${hash_exts[@]}"
+          process_group "slash" "${slash_exts[@]}"
 
       - name: Commit changes
         shell: bash
