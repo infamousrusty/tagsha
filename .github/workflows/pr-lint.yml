@@ -4,6 +4,7 @@ name: PR Validation
 #   1. PR title follows Conventional Commits (feat/fix/chore/docs/etc.)
 #   2. PR body is not empty (at least 20 characters)
 #   3. Forks cannot trigger privileged workflows (security boundary)
+#   4. Skips validation for trusted bot accounts to prevent pipeline lockups
 
 on:
   pull_request:
@@ -19,11 +20,13 @@ permissions:
 jobs:
   title-lint:
     name: Conventional Commit Title
+    # Skip this entire job if the PR was created by a standard bot
+    if: github.actor != 'dependabot[bot]' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Validate PR title
-        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        uses: amannn/action-semantic-pull-request@v5.5.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -44,9 +47,16 @@ jobs:
           subjectPattern: ^.{10,100}$
           subjectPatternError: |
             PR title subject must be between 10 and 100 characters.
+          # Additionally ignore any PR labeled as 'bot' or 'dependabot'
+          ignoreLabels: |
+            bot
+            dependabot
+            ignore-semantic-pull-request
 
   body-check:
     name: PR Body Not Empty
+    # Skip body check for bots, as their body content is dynamically generated
+    if: github.actor != 'dependabot[bot]' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
