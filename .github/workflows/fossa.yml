@@ -35,5 +35,4 @@ jobs:
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
           project: TAGSHA
-          branch: ${{ github.head_ref || github.ref_name }}
           run-tests: true
