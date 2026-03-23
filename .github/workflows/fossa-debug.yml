@@ -24,7 +24,7 @@ jobs:
           cache: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
 
@@ -36,7 +36,7 @@ jobs:
 
       - name: Upload FOSSA debug bundle
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fossa-debug-bundle
           path: ./fossa.debug.json.gz
