@@ -1,106 +1,107 @@
-name: Auto-generate ADR from Changes
+name: Auto ADR Pipeline
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, closed]
   push:
     branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'Dockerfile**'
+      - '.github/workflows/**'
+      - 'terraform/**'
+      - 'config/**'
+  pull_request:
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'Dockerfile**'
+      - '.github/workflows/**'
+      - 'terraform/**'
+      - 'config/**'
 
 permissions:
   contents: write
   pull-requests: write
-  issues: read
   discussions: write
 
 jobs:
-  analyze-changes:
+  detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      generate: ${{ steps.changes.outputs.generate }}
-      summary: ${{ steps.changes.outputs.summary }}
+      should_generate: ${{ steps.files.outputs.changed_files != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 2
       
-      - id: changes
-        name: Detect significant changes
+      - id: files
+        name: List changed files
         run: |
-          # Check for code/infra changes, deps, Dockerfiles, workflows
-          if git diff --name-only ${{ github.event.before || 'HEAD~1' }} | grep -E '(Dockerfile|docker-compose|go.mod|package.json|.github/workflows|terraform|docs/|config/)' | grep -v '^docs/decisions/'; then
-            echo "generate=true" >> $GITHUB_OUTPUT
-            SUMMARY=$(git diff --stat ${{ github.event.before || 'HEAD~1' }} | head -3)
-            echo "summary<<EOF" >> $GITHUB_OUTPUT
-            echo "$SUMMARY" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "generate=false" >> $GITHUB_OUTPUT
-          fi
+          CHANGED=$(git diff --name-only HEAD~1 || echo "")
+          echo "changed_files<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
   generate-adr:
-    needs: analyze-changes
-    if: needs.analyze-changes.outputs.generate == 'true'
+    needs: detect-changes
+    if: needs.detect-changes.outputs.should_generate == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       
-      - name: Get next ADR number
-        id: adr-number
+      - name: Get next ADR ID
+        id: adr-id
         run: |
-          if [ -d "docs/decisions" ]; then
-            LAST=$(ls docs/decisions/*.md | sort -V | tail -1 | sed 's/.*///; s/.md$//; s/[^0-9]*//g')
-            NEXT=$((LAST + 1))
-          else
-            mkdir -p docs/decisions
-            NEXT=0001
-          fi
-          echo "number=$NEXT" >> $GITHUB_OUTPUT
+          mkdir -p docs/decisions
+          cd docs/decisions
+          LAST_ID=$(ls -1 *.md 2>/dev/null | sed -n 's/^0*([1-9][0-9]*)-.*/\u0001/p' | sort -n | tail -1 || echo "0")
+          NEXT_ID=$(printf "%04d" $((LAST_ID + 1)))
+          echo "next_id=$NEXT_ID" >> $GITHUB_OUTPUT
       
-      - name: Generate ADR content
-        id: content
+      - name: Create ADR content
+        id: adr-file
         env:
-          PR_TITLE: ${{ github.event.pull_request.title || github.event.head_commit.message }}
-          PR_BODY: ${{ github.event.pull_request.body || '' }}
-          COMMIT_SUMMARY: ${{ needs.analyze-changes.outputs.summary }}
+          TITLE: ${{ github.event.pull_request.title || github.event.head_commit.message || 'Untriaged changes' }}
+          FILES: ${{ needs.detect-changes.outputs.changed_files }}
         run: |
-          cat > docs/decisions/${{ steps.adr-number.outputs.number }}-auto-generated.md << EOF
-          # ADR ${{ steps.adr-number.outputs.number }}: Auto-generated from ${{ github.event.pull_request.number || 'commit' }} "$(date +%Y-%m-%d)"
+          ADR_FILE="docs/decisions/${{ steps.adr-id.outputs.next_id }}-$(echo '${{ env.TITLE }}' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | head -c 50).md"
+          cat > "$ADR_FILE" << 'EOF'
+# ADR ${{ steps.adr-id.outputs.next_id }}: Auto-generated from commit/PR
 
-          ## Status
-          Proposed
+## Status
+**proposed**
 
-          ## Context and Problem Statement
-          GitHub detected changes on $(date +%Y-%m-%d):
-          ```
-          ${{ needs.analyze-changes.outputs.summary }}
-          ```
-          PR/Commit: ${{ env.PR_TITLE }}
+## Timestamp
+$(date +%Y-%m-%d %H:%M UTC)
 
-          ## Decision Drivers
-          - Auto-tracked for concrete record
-          - Changes: $(git diff --name-only HEAD~1 | tr '
-' ', ')
+## Context
+Auto-detected changes in tagsha:
+```
+${{ env.FILES }}
+```
 
-          ## Considered Options
-          - Accept changes as-is (no manual ADR needed)
+Trigger: ${{ env.TITLE }}
 
-          ## Decision Outcome
-          **Accepted** (auto-generated, review to supersede/superseded)
+## Decision
+**accepted** - auto-tracked infrastructure/code evolution
 
-          ## Consequences
-          Creates permanent record of infra/code evolution for tagsha.
-          EOF
+## Positive Consequences
+- Concrete record of all significant changes
+- No manual tracking overhead
+
+## Review
+Edit status to: accepted | rejected | superseded | deprecated
+EOF
+          echo "file=$ADR_FILE" >> $GITHUB_OUTPUT
       
       - name: Commit ADR
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "docs(adr): auto-generate ADR ${{ steps.adr-number.outputs.number }} from changes"
-          file_pattern: 'docs/decisions/*.md'
+          commit_message: "docs(adr): auto ${{ steps.adr-id.outputs.next_id }} from changes [skip ci]"
+          file_pattern: docs/decisions/
       
-      - name: Sync to Discussion
+      - name: Sync ADR to Discussion
+        if: always()
         uses: yujiosaka/adr-sync@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
