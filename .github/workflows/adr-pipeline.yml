@@ -9,15 +9,7 @@ on:
       - 'Dockerfile**'
       - '.github/workflows/**'
       - 'terraform/**'
-      - 'config/**'
   pull_request:
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'Dockerfile**'
-      - '.github/workflows/**'
-      - 'terraform/**'
-      - 'config/**'
 
 permissions:
   contents: write
@@ -25,84 +17,57 @@ permissions:
   discussions: write
 
 jobs:
-  detect-changes:
+  auto-adr:
     runs-on: ubuntu-latest
-    outputs:
-      should_generate: ${{ steps.files.outputs.changed_files != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
       
-      - id: files
-        name: List changed files
-        run: |
-          CHANGED=$(git diff --name-only HEAD~1 || echo "")
-          echo "changed_files<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGED" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-  generate-adr:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.should_generate == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Get next ADR ID
-        id: adr-id
-        run: |
-          mkdir -p docs/decisions
-          cd docs/decisions
-          LAST_ID=$(ls -1 *.md 2>/dev/null | sed -n 's/^0*([1-9][0-9]*)-.*/\u0001/p' | sort -n | tail -1 || echo "0")
-          NEXT_ID=$(printf "%04d" $((LAST_ID + 1)))
-          echo "next_id=$NEXT_ID" >> $GITHUB_OUTPUT
-      
-      - name: Create ADR content
-        id: adr-file
+      - name: Detect & generate ADR
         env:
-          TITLE: ${{ github.event.pull_request.title || github.event.head_commit.message || 'Untriaged changes' }}
-          FILES: ${{ needs.detect-changes.outputs.changed_files }}
+          PR_TITLE: ${{ github.event.pull_request.title || github.event.head_commit.message || 'changes' }}
         run: |
-          ADR_FILE="docs/decisions/${{ steps.adr-id.outputs.next_id }}-$(echo '${{ env.TITLE }}' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | head -c 50).md"
-          cat > "$ADR_FILE" << 'EOF'
-# ADR ${{ steps.adr-id.outputs.next_id }}: Auto-generated from commit/PR
+          # Changed files
+          CHANGED=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
+          
+          # Skip if no relevant changes
+          if [[ ! "$CHANGED" =~ (go.mod|Dockerfile|.github/workflows|terraform) ]]; then
+            echo "No ADR-worthy changes"
+            exit 0
+          fi
+          
+          # Next ID
+          mkdir -p docs/decisions
+          pushd docs/decisions >/dev/null
+          LAST=$(ls -1 [0-9]*.md 2>/dev/null | sed 's/^0*([1-9][0-9]*)-.*/\u0001/' | sort -n | tail -1 || echo 0)
+          ID=$(printf "%04d" $((LAST + 1)))
+          popd >/dev/null
+          
+          # Write ADR
+          cat > "docs/decisions/${ID}-auto-${PR_TITLE//[^a-zA-Z0-9]/-}.md" << EOF
+# ADR $ID: Auto-generated $(date +%Y-%m-%d)
 
-## Status
-**proposed**
-
-## Timestamp
-$(date +%Y-%m-%d %H:%M UTC)
+**Status:** proposed
 
 ## Context
-Auto-detected changes in tagsha:
+Auto-tracked changes:
 ```
-${{ env.FILES }}
+$CHANGED
 ```
 
-Trigger: ${{ env.TITLE }}
+Title: $PR_TITLE
 
 ## Decision
-**accepted** - auto-tracked infrastructure/code evolution
+**accepted** - permanent record created
 
-## Positive Consequences
-- Concrete record of all significant changes
-- No manual tracking overhead
-
-## Review
-Edit status to: accepted | rejected | superseded | deprecated
+## Pros
+Concrete change history without manual work
 EOF
-          echo "file=$ADR_FILE" >> $GITHUB_OUTPUT
       
       - name: Commit ADR
         uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "docs(adr): auto ${{ steps.adr-id.outputs.next_id }} from changes [skip ci]"
-          file_pattern: docs/decisions/
-      
-      - name: Sync ADR to Discussion
         if: always()
-        uses: yujiosaka/adr-sync@v1
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
+          commit_message: "docs(adr): auto #$ID [skip ci]"
+          file_pattern: 'docs/decisions/'
