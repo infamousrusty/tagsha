@@ -201,209 +201,6 @@ jobs:
   # ---------------------------------------------------------------------------
   # Semantic Versioning & Release (on main push/manual)
   # ---------------------------------------------------------------------------
-  # SPDX-License-Identifier: LGPL-3.0-or-later
-# Copyright (C) 2026 infamousrusty
-
-name: CI/CD
-run-name: CI/CD on ${{ github.ref_name }}
-
-on:
-  push:
-    branches: [main, develop]
-    tags: ['v*.*.*']
-  pull_request:
-    branches: [main, develop]
-  workflow_dispatch:
-    inputs:
-      version_type:
-        description: 'SemVer bump type'
-        required: false
-        default: 'patch'
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-
-# ---------------------------------------------------------------------------
-# Concurrency — cancel in-flight runs on the same branch/PR to save minutes.
-# Release and tag pushes are NOT cancelled (group includes the SHA).
-# ---------------------------------------------------------------------------
-concurrency:
-  group: ci-${{ github.ref }}-${{ startsWith(github.ref, 'refs/tags/') && github.sha || 'branch' }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
-
-permissions:
-  contents: write
-  packages: write
-  id-token: write
-
-jobs:
-  # ---------------------------------------------------------------------------
-  # Backend — tidy, lint, vet
-  # ---------------------------------------------------------------------------
-  backend-lint:
-    name: Backend Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Go 1.24
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
-        with:
-          go-version: '1.24'
-          cache: false
-
-      - name: go mod tidy
-        run: go mod tidy
-
-      - name: go vet
-        run: go vet ./...
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.3
-          args: --config ../.github/golangci.yml --timeout 5m
-          working-directory: backend
-
-  # ---------------------------------------------------------------------------
-  # Backend — unit tests with race detector
-  # ---------------------------------------------------------------------------
-  backend-test:
-    name: Backend Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: backend-lint
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Go 1.24
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
-        with:
-          go-version: '1.24'
-          cache: false
-
-      - name: go mod tidy
-        run: go mod tidy
-
-      - name: Unit tests (race detector + coverage)
-        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # v4.6.0
-        with:
-          files: backend/coverage.out
-          flags: backend
-        continue-on-error: true
-
-  # ---------------------------------------------------------------------------
-  # Frontend — type-check, lint, test, build
-  # ---------------------------------------------------------------------------
-  frontend-test:
-    name: Frontend Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Node 22
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
-        with:
-          node-version: '22'
-
-      - name: Install dependencies
-        run: npm install --legacy-peer-deps
-
-      - name: Type check
-        run: npm run type-check
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Unit tests
-        run: npm run test
-
-      - name: Production build
-        run: npm run build
-
-  # ---------------------------------------------------------------------------
-  # Security — Gosec SAST, Trivy filesystem secret scan
-  # ---------------------------------------------------------------------------
-  security-scan:
-    name: Security Scanning
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [backend-test]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Go 1.24
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
-        with:
-          go-version: '1.24'
-
-      - name: Resolve Go module dependencies
-        working-directory: backend
-        run: |
-          go mod tidy
-          go mod download
-
-      - name: Install gosec
-        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.21.4
-
-      - name: Gosec SAST
-        working-directory: backend
-        run: |
-          gosec -fmt sarif -out gosec.sarif -exclude-dir=vendor ./...
-
-      - name: Upload Gosec SARIF artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        if: always()
-        with:
-          name: gosec-sarif
-          path: backend/gosec.sarif
-          retention-days: 30
-
-      - name: Install Trivy
-        run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-
-      - name: Trivy filesystem secret scan
-        run: |
-          trivy fs \
-            --scanners secret \
-            --exit-code 1 \
-            --severity HIGH,CRITICAL \
-            --format sarif \
-            --output trivy-fs.sarif \
-            .
-
-      - name: Upload Trivy SARIF artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        if: always()
-        with:
-          name: trivy-fs-sarif
-          path: trivy-fs.sarif
-          retention-days: 30
-
-  # ---------------------------------------------------------------------------
-  # Semantic Versioning & Release (on main push/manual)
-  # ---------------------------------------------------------------------------
   release:
     name: Semantic Release
     runs-on: ubuntu-latest
@@ -412,13 +209,11 @@ jobs:
     if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
-
     outputs:
       version: ${{ steps.version.outputs.version }}
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
@@ -428,12 +223,19 @@ jobs:
           VERSION_TYPE: ${{ github.event.inputs.version_type || 'patch' }}
         run: |
           set -Eeuo pipefail
+
           git fetch --tags --force origin
+
           LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1)
           LATEST_TAG=${LATEST_TAG:-v0.0.0}
+
           VERSION_NO_V="${LATEST_TAG#v}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NO_V"
-          MAJOR=${MAJOR:-0}; MINOR=${MINOR:-0}; PATCH=${PATCH:-0}
+
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+
           if [ "$VERSION_TYPE" = "major" ]; then
             MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
           elif [ "$VERSION_TYPE" = "minor" ]; then
@@ -441,6 +243,7 @@ jobs:
           else
             PATCH=$((PATCH + 1))
           fi
+
           NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
@@ -451,13 +254,19 @@ jobs:
           app_id: ${{ secrets.TAGBOT_APP_ID }}
           private_key: ${{ secrets.TAGBOT_PRIVATE_KEY }}
 
-      - name: Create Git Tag FIRST
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push Git tag
         env:
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           TAG_NAME="${{ steps.version.outputs.version }}"
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
           git tag "$TAG_NAME"
-          git push origin "$TAG_NAME" --force
+          git push origin "$TAG_NAME"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -466,7 +275,7 @@ jobs:
           name: Release ${{ steps.version.outputs.version }}
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }} 
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
 
   # ---------------------------------------------------------------------------
   # Docker — build, push to GHCR, container scan
@@ -485,121 +294,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4 # v4.0.0
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
-
-      - name: Log in to GHCR
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Resolve version
-        id: version
-        run: |
-          if [[ "${{ needs.release.outputs.version }}" != "" ]]; then
-            echo "value=${{ needs.release.outputs.version }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == refs/heads/main || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "value=dev" >> $GITHUB_OUTPUT
-          else
-            echo "value=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Extract API metadata
-        id: api-meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/tagsha-api
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=${{ steps.version.outputs.value }}
-
-      - name: Build and push API image
-        id: api-build
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
-        with:
-          context: backend
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.api-meta.outputs.tags }}
-          labels: ${{ steps.api-meta.outputs.labels }}
-          build-args: VERSION=${{ steps.version.outputs.value }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Extract frontend metadata
-        id: fe-meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/tagsha-frontend
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=${{ steps.version.outputs.value }}
-
-      - name: Build and push frontend image
-        id: fe-build
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
-        with:
-          context: frontend
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.fe-meta.outputs.tags }}
-          labels: ${{ steps.fe-meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Install Trivy
-        if: always()
-        run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-
-      - name: Trivy container vulnerability scan (API)
-        if: github.event_name != 'pull_request'
-        run: |
-          trivy image \
-            --exit-code 0 \
-            --severity HIGH,CRITICAL \
-            --ignore-unfixed \
-            --scanners vuln \
-            --format sarif \
-            --output trivy-api-container.sarif \
-            ghcr.io/${{ github.repository_owner }}/tagsha-api:${{ steps.version.outputs.value }}
-
-      - name: Upload Trivy API container SARIF
-        if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: trivy-api-container-sarif
-          path: trivy-api-container.sarif
-          retention-days: 30 
-
-  # ---------------------------------------------------------------------------
-  # Docker — build, push to GHCR, container scan
-  # ---------------------------------------------------------------------------
-  docker-build:
-    name: Docker Build and Push
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [backend-test, frontend-test, security-scan, release]
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4 # v4.0.0
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
