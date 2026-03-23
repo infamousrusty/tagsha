@@ -26,30 +26,44 @@ permissions:
 
 jobs:
   detect-changes:
-    runs-on: ubuntu-latest
-    outputs:
-      changed_files: ${{ steps.files.outputs.changed_files }}
-      should_generate: ${{ steps.files.outputs.changed_files != '' }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+  runs-on: ubuntu-latest
+  outputs:
+    changed_files: ${{ steps.files.outputs.changed_files }}
+    should_generate: ${{ steps.files.outputs.changed_files != '' }}
 
-      - id: files
-        name: List changed files
-        run: |
-          set -euo pipefail
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
-          BASE_SHA="${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}"
-          HEAD_SHA="${{ github.sha }}"
+    - id: base
+      name: Determine base SHA
+      run: |
+        set -euo pipefail
 
-          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          echo "base_sha=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "base_sha=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+        fi
 
-          {
-            echo "changed_files<<EOF"
-            printf '%s\n' "$CHANGED"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+    - id: files
+      name: List changed files
+      run: |
+        set -euo pipefail
+
+        BASE_SHA="${{ steps.base.outputs.base_sha }}"
+        HEAD_SHA="${{ github.sha }}"
+
+        echo "Comparing: $BASE_SHA -> $HEAD_SHA"
+
+        CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
+
+        {
+          echo "changed_files<<EOF"
+          printf '%s\n' "$CHANGED"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
 
   generate-adr:
     needs: detect-changes
