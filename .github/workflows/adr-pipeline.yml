@@ -43,7 +43,42 @@ jobs:
 
           mkdir -p docs/decisions
 
-          # --- Resolve base safely ---
+          yaml_escape() {
+            printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+          }
+
+          classify_tags() {
+            local title_lower
+            declare -A tags=()
+
+            title_lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+
+            while IFS= read -r path; do
+              [ -n "$path" ] || continue
+
+              case "$path" in
+                terraform/*|*/terraform/*) tags[infra]=1 ;;
+                .github/workflows/*|*/.github/workflows/*) tags[ci]=1 ;;
+                config/*|*/config/*) tags[config]=1 ;;
+              esac
+
+              case "$path" in
+                *.go|go.mod) tags[runtime]=1 ;;
+              esac
+            done
+
+            if printf '%s' "$title_lower" | grep -Eq '(auth|security|secret|token|jwt|tls|crypto|encrypt|password|credential)'; then
+              tags[security]=1
+            fi
+
+            if [ "${#tags[@]}" -eq 0 ]; then
+              tags[general]=1
+            fi
+
+            printf '%s\n' "${!tags[@]}" | sort | paste -sd ', ' -
+          }
+
+          # Resolve base safely
           if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
             BASE_SHA="$(git rev-list --max-parents=0 "$HEAD_SHA" | tail -n 1)"
           fi
@@ -55,7 +90,7 @@ jobs:
             exit 0
           fi
 
-          # --- Skip if only ADR files changed ---
+          # Skip if only ADR files changed
           CHANGED_FILES=$(for sha in $COMMITS; do
             git show --name-only --format= "$sha"
           done | sed '/^$/d')
@@ -66,7 +101,7 @@ jobs:
             exit 0
           fi
 
-          # --- Determine next ADR ID ---
+          # Determine next ADR ID
           max_id=0
           while IFS= read -r file; do
             [ -n "$file" ] || continue
@@ -97,13 +132,10 @@ jobs:
 
           count=0
 
-          # --- Process commits ---
           for sha in $COMMITS; do
             files="$(git show --format= --name-only "$sha" | sed '/^$/d' || true)"
-
             [ -n "$files" ] || continue
 
-            # Filter relevant files only
             if ! printf '%s\n' "$files" | grep -Eq \
               '(^|/)(terraform|config|\.github/workflows)/|(^|/)Dockerfile(\..*)?$|(^|/)[^/]+\.go$|^go\.mod$'; then
               continue
@@ -117,47 +149,87 @@ jobs:
             title="$(git show -s --format=%s "$sha" | sed 's/[[:space:]]\+/ /g')"
             slug="$(slugify "$title")"
             file="docs/decisions/${id}-${slug}.md"
+            tags="$(classify_tags "$title" <<< "$files")"
 
-            cat > "$file" <<EOF
----
-adr_id: "$id"
-source_commit: "$sha"
-source_type: "commit"
-source_run: "$RUN_URL"
-status: "proposed"
----
+            summary="$(yaml_escape "$title")"
+            title_escaped="$(yaml_escape "$title")"
+            tags_escaped="$(yaml_escape "$tags")"
 
-# ADR $id: $title
-
-## Status
-proposed
-
-## Timestamp
-$(date -u '+%Y-%m-%d %H:%M UTC')
-
-## Context
-Relevant files touched:
-\`\`\`
-$files
-\`\`\`
-
-## Decision
-accepted
-
-## Consequences
-- Provides an auditable decision record
-- Generated automatically from repository history
-
-## Review
-Change the status to accepted, rejected, superseded, or deprecated when reviewed.
-EOF
+            printf '%s\n' \
+"---" \
+"adr_id: \"$id\"" \
+"source_commit: \"$sha\"" \
+"source_type: \"commit\"" \
+"source_run: \"$RUN_URL\"" \
+"status: \"proposed\"" \
+"tags: \"$tags_escaped\"" \
+"summary: \"$summary\"" \
+"---" \
+"" \
+"# ADR $id: $title_escaped" \
+"" \
+"## Status" \
+"proposed" \
+"" \
+"## Timestamp" \
+"$(date -u '+%Y-%m-%d %H:%M UTC')" \
+"" \
+"## Context" \
+"Relevant files touched:" \
+"\`\`\`" \
+"$files" \
+"\`\`\`" \
+"" \
+"## Decision" \
+"accepted" \
+"" \
+"## Consequences" \
+"- Provides an auditable decision record" \
+"- Generated automatically from repository history" \
+"" \
+"## Review" \
+"Change the status to accepted, rejected, superseded, or deprecated when reviewed." \
+> "$file"
 
             count=$((count + 1))
           done
 
+          if [ "$count" -gt 0 ]; then
+            index_file="docs/decisions/README.md"
+
+            {
+              printf '# Decision Log\n\n'
+              printf 'Auto-generated index of architecture decision records.\n\n'
+              printf '| ADR | Title | Status | Tags | Source commit |\n'
+              printf '| --- | --- | --- | --- | --- |\n'
+
+              while IFS= read -r file; do
+                [ -f "$file" ] || continue
+
+                id="$(basename "$file" | sed -E 's/^([0-9]{4})-.*/\1/')"
+                title="$(sed -n 's/^# ADR [0-9][0-9][0-9][0-9]: //p' "$file" | head -n1)"
+                status="$(sed -n 's/^status: "\(.*\)"/\1/p' "$file" | head -n1)"
+                tags="$(sed -n 's/^tags: "\(.*\)"/\1/p' "$file" | head -n1)"
+                commit="$(sed -n 's/^source_commit: "\(.*\)"/\1/p' "$file" | head -n1)"
+
+                title="${title//|/\\|}"
+                status="${status//|/\\|}"
+                tags="${tags//|/\\|}"
+
+                printf '| [%s](./%s) | %s | %s | %s | `%s` |\n' \
+                  "$id" \
+                  "$(basename "$file")" \
+                  "${title:-Untitled}" \
+                  "${status:-proposed}" \
+                  "${tags:-general}" \
+                  "${commit:-unknown}"
+              done < <(find docs/decisions -maxdepth 1 -type f -name '[0-9][0-9][0-9][0-9]-*.md' | sort)
+            } > "$index_file"
+          fi
+
           echo "count=$count" >> "$GITHUB_OUTPUT"
 
-      - name: Commit ADRs
+      - name: Commit ADRs safely
         if: steps.generate.outputs.count != '0'
         shell: bash
         run: |
@@ -174,6 +246,8 @@ EOF
           fi
 
           git commit -m "docs(adr): auto-generate ADRs [skip ci]"
-          git pull --rebase origin main
+
+          git fetch origin main
+          git rebase origin/main
 
           git push origin HEAD:main
