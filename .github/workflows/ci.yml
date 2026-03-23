@@ -253,6 +253,13 @@ jobs:
 
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Generate GitHub App Token
+        id: generate_token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.TAGBOT_APP_ID }}
+          private_key: ${{ secrets.TAGBOT_PRIVATE_KEY }}
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -260,7 +267,7 @@ jobs:
           name: Release ${{ steps.version.outputs.version }}
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
 
   # ---------------------------------------------------------------------------
   # Docker — build, push to GHCR, container scan
