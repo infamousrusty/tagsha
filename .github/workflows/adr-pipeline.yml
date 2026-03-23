@@ -6,118 +6,114 @@ on:
     paths:
       - '**/*.go'
       - 'go.mod'
-      - 'Dockerfile**'
+      - 'Dockerfile'
+      - 'Dockerfile.*'
+      - '**/Dockerfile'
+      - '**/Dockerfile.*'
       - '.github/workflows/**'
       - 'terraform/**'
       - 'config/**'
-  pull_request:
-    paths:
-      - '**/*.go'
-      - 'go.mod'
-      - 'Dockerfile**'
-      - '.github/workflows/**'
-      - 'terraform/**'
-      - 'config/**'
+    paths-ignore:
+      - 'docs/decisions/**'
 
 permissions:
   contents: write
-  pull-requests: write
-  discussions: write
+
+concurrency:
+  group: adr-autogen-main
+  cancel-in-progress: false
 
 jobs:
-  detect-changes:
+  generate-adrs:
     runs-on: ubuntu-latest
-    outputs:
-      changed_files: ${{ steps.files.outputs.changed_files }}
-      should_generate: ${{ steps.files.outputs.changed_files != '' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # --- SAFE BASE SHA RESOLUTION ---
-      - id: base_push
-        if: ${{ github.event_name == 'push' }}
-        run: echo "base_sha=${{ github.event.before }}" >> $GITHUB_OUTPUT
-
-      - id: base_pr
-        if: ${{ github.event_name == 'pull_request' }}
-        run: |
-          set -euo pipefail
-          BASE=$(git merge-base \
-            "${{ github.event.pull_request.base.sha }}" \
-            "${{ github.event.pull_request.head.sha }}")
-          echo "base_sha=$BASE" >> $GITHUB_OUTPUT
-
-      - id: files
-        name: List changed files
-        run: |
-          set -euo pipefail
-
-          BASE_SHA="${{ steps.base_push.outputs.base_sha || steps.base_pr.outputs.base_sha }}"
-          HEAD_SHA="${{ github.sha }}"
-
-          # fallback for edge cases
-          if [ -z "$BASE_SHA" ] || ! git cat-file -e "$BASE_SHA"^{commit} 2>/dev/null; then
-            BASE_SHA=$(git rev-parse HEAD~1)
-          fi
-
-          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
-
-          if [ -z "$CHANGED" ]; then
-            echo "No changes detected"
-            exit 0
-          fi
-
-          {
-            echo "changed_files<<EOF"
-            printf '%s\n' "$CHANGED"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-  generate-adr:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.should_generate == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Get next ADR ID
-        id: adr-id
+      - name: Generate ADRs for pushed commits
+        id: generate
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
 
           mkdir -p docs/decisions
 
-          LAST_ID=$(find docs/decisions -maxdepth 1 -type f -name '*.md' -printf '%f\n' \
-            | sed -E 's/^([0-9]{4})-.*/\1/' \
-            | sort -n \
-            | tail -n 1)
+          if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
+            BASE_SHA="$(git rev-list --max-parents=0 "$HEAD_SHA" | tail -n 1)"
+          fi
 
-          LAST_ID=${LAST_ID:-0}
-          NEXT_ID=$(printf "%04d" "$((10#$LAST_ID + 1))")
+          COMMITS="$(git rev-list --reverse "${BASE_SHA}..${HEAD_SHA}" || true)"
 
-          echo "next_id=$NEXT_ID" >> $GITHUB_OUTPUT
+          if [ -z "$COMMITS" ]; then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-      - name: Create ADR
-        id: adr
-        env:
-          TITLE: ${{ github.event.pull_request.title || github.event.head_commit.message || 'Untriaged changes' }}
-          FILES: ${{ needs.detect-changes.outputs.changed_files }}
-        run: |
-          set -euo pipefail
+          max_id=0
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            id_part="$(basename "$file" | sed -E 's/^([0-9]{4})-.*/\1/')"
+            if printf '%s' "$id_part" | grep -Eq '^[0-9]{4}$'; then
+              n=$((10#$id_part))
+              if [ "$n" -gt "$max_id" ]; then
+                max_id="$n"
+              fi
+            fi
+          done < <(find docs/decisions -maxdepth 1 -type f -name '*.md' | sort)
 
-          SLUG=$(printf '%s' "$TITLE" \
-            | tr '[:upper:]' '[:lower:]' \
-            | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' \
-            | cut -c1-50)
+          next_id() {
+            max_id=$((max_id + 1))
+            printf '%04d' "$max_id"
+          }
 
-          FILE="docs/decisions/${{ steps.adr-id.outputs.next_id }}-$SLUG.md"
+          slugify() {
+            printf '%s' "$1" \
+              | tr '[:upper:]' '[:lower:]' \
+              | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' \
+              | cut -c1-50
+          }
 
-          cat > "$FILE" <<EOF
-# ADR ${{ steps.adr-id.outputs.next_id }}: Auto-generated
+          has_adr_for_commit() {
+            grep -Rqs "source_commit: $1" docs/decisions 2>/dev/null
+          }
+
+          count=0
+
+          for sha in $COMMITS; do
+            files="$(git show --format= --name-only "$sha" | sed '/^$/d' || true)"
+
+            [ -n "$files" ] || continue
+
+            if ! printf '%s\n' "$files" | grep -Eq '(^|/)(terraform|config|\.github/workflows)/|(^|/)Dockerfile(\..*)?$|(^|/)[^/]+\.go$|^go\.mod$'; then
+              continue
+            fi
+
+            if has_adr_for_commit "$sha"; then
+              continue
+            fi
+
+            id="$(next_id)"
+            title="$(git show -s --format=%s "$sha" | sed 's/[[:space:]]\+/ /g')"
+            slug="$(slugify "$title")"
+            file="docs/decisions/${id}-${slug}.md"
+
+            cat > "$file" <<EOF
+---
+adr_id: "$id"
+source_commit: "$sha"
+source_type: "commit"
+source_run: "$RUN_URL"
+status: "proposed"
+---
+
+# ADR $id: $title
 
 ## Status
 proposed
@@ -126,31 +122,42 @@ proposed
 $(date -u '+%Y-%m-%d %H:%M UTC')
 
 ## Context
+Relevant files touched:
 \`\`\`
-${FILES}
+$files
 \`\`\`
-
-Trigger: ${TITLE}
 
 ## Decision
 accepted
 
 ## Consequences
-- Automated traceability
-- Zero manual overhead
+- Provides an auditable decision record
+- Generated automatically from repository history
+
+## Review
+Change the status to accepted, rejected, superseded, or deprecated when reviewed.
 EOF
 
-          echo "file=$FILE" >> $GITHUB_OUTPUT
+            count=$((count + 1))
+          done
 
-      - name: Commit ADR
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "docs(adr): auto ${{ steps.adr-id.outputs.next_id }} [skip ci]"
-          file_pattern: docs/decisions/
+          echo "count=$count" >> "$GITHUB_OUTPUT"
 
-      - name: Sync ADR
-        if: always()
-        uses: yujiosaka/adr-sync@v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
+      - name: Commit ADRs
+        if: steps.generate.outputs.count != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add docs/decisions/
+
+          if git diff --cached --quiet; then
+            echo "No ADR changes to commit"
+            exit 0
+          fi
+
+          git commit -m "docs(adr): auto-generate ADRs [skip ci]"
+          git push
