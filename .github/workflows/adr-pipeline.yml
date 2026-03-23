@@ -23,7 +23,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.RELEASE_TOKEN }}
-          ref: main
           fetch-depth: 0
 
       - name: UK English Spelling Check
@@ -65,15 +64,15 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Pull latest main before generating index
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: git pull --rebase origin main
+
       - name: Generate ADR Index
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         run: npx adr-log -d adr/ > adr/README.md
-
-      - name: Pull latest main before commit
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: bash
-        run: git pull --rebase origin main
 
       - name: Commit ADR Index
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
