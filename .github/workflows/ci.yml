@@ -97,7 +97,7 @@ jobs:
         run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
 
       - name: Upload coverage
-        uses: codecov/codecov-action@5.5.3 # v5.5.3
+        uses: codecov/codecov-action@fdcc8476540edceab3de004e990f80d881c6cc00 # v5.5.0
         with:
           files: backend/coverage.out
           flags: backend
