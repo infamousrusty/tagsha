@@ -267,7 +267,7 @@ jobs:
           name: Release ${{ steps.version.outputs.version }}
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }} 
 
   # ---------------------------------------------------------------------------
   # Docker — build, push to GHCR, container scan
