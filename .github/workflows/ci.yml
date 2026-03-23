@@ -202,96 +202,65 @@ jobs:
   # Semantic Versioning & Release (on main push/manual)
   # ---------------------------------------------------------------------------
   release:
-    name: Semantic Release
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [backend-test, frontend-test, security-scan]
-    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
-    permissions:
-      contents: write
-      pull-requests: write
-    outputs:
-      version: ${{ steps.release.outputs.version }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
+  name: Semantic Release
+  runs-on: ubuntu-latest
+  timeout-minutes: 10
 
-      - name: Semantic Release
-        id: release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION_TYPE: ${{ github.event.inputs.version_type || 'patch' }}
-        run: |
-          set -Eeuo pipefail
+  needs: [backend-test, frontend-test, security-scan]
 
-          # Ensure all remote tags are fetched to prevent local mismatches
-          git fetch --force --tags origin
+  if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
 
-          # Find the absolute highest version tag across the entire repo
-          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1)
-          LATEST_TAG=${LATEST_TAG:-v0.0.0}
-          echo "Latest tag: $LATEST_TAG"
+  permissions:
+    contents: write
 
-          VERSION_NO_V="${LATEST_TAG#v}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NO_V"
+  outputs:
+    version: ${{ steps.release.outputs.version }}
 
-          # Fallback to integers if parsing yields empty strings
-          MAJOR=${MAJOR:-0}
-          MINOR=${MINOR:-0}
-          PATCH=${PATCH:-0}
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
 
-          CURRENT_BUMP="$VERSION_TYPE"
+    - name: Determine version
+      id: version
+      run: |
+        set -Eeuo pipefail
 
-          while :; do
-            if [ "$CURRENT_BUMP" = "major" ]; then
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-            elif [ "$CURRENT_BUMP" = "minor" ]; then
-              MINOR=$((MINOR + 1))
-              PATCH=0
-            else
-              PATCH=$((PATCH + 1))
-            fi
+        git fetch --tags --force origin
 
-            NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+        LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+        LATEST_TAG=${LATEST_TAG:-v0.0.0}
 
-            # Ensure this tag does not exist locally
-            if git rev-parse -q --verify "refs/tags/$NEW_VERSION" >/dev/null; then
-              echo "Tag $NEW_VERSION exists locally. Incrementing patch..."
-              CURRENT_BUMP="patch"
-              continue
-            fi
-            
-            # Ensure this tag does not exist remotely
-            if git ls-remote --tags origin "refs/tags/$NEW_VERSION" | grep -q "$NEW_VERSION"; then
-              echo "Tag $NEW_VERSION exists remotely. Incrementing patch..."
-              CURRENT_BUMP="patch"
-              continue
-            fi
+        VERSION_NO_V="${LATEST_TAG#v}"
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NO_V"
 
-            break
-          done
+        MAJOR=${MAJOR:-0}
+        MINOR=${MINOR:-0}
+        PATCH=${PATCH:-0}
 
-          echo "New version: $NEW_VERSION"
+        VERSION_TYPE="${VERSION_TYPE:-patch}"
 
-          # Use infamousrusty to protect anonymity in Git history
-          git config user.name "infamousrusty"
-          git config user.email "infamousrusty@users.noreply.github.com"
-          
-          - name: Create Release
-          uses: softprops/action-gh-release@v2
-            with:
-              tag_name: ${{ steps.release.outputs.version }}
-              name: Release ${{ steps.release.outputs.version }}
-    generate_release_notes: true
-            env:
-              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if [ "$VERSION_TYPE" = "major" ]; then
+          MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
+        elif [ "$VERSION_TYPE" = "minor" ]; then
+          MINOR=$((MINOR + 1)); PATCH=0
+        else
+          PATCH=$((PATCH + 1))
+        fi
 
-          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+        NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+
+        echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: Release ${{ steps.version.outputs.version }}
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
   # Docker — build, push to GHCR, container scan
