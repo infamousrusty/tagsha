@@ -281,8 +281,14 @@ jobs:
           git config user.name "infamousrusty"
           git config user.email "infamousrusty@users.noreply.github.com"
           
-          git tag "$NEW_VERSION"
-          git push origin "$NEW_VERSION"
+          - name: Create Release
+          uses: softprops/action-gh-release@v2
+            with:
+              tag_name: ${{ steps.release.outputs.version }}
+              name: Release ${{ steps.release.outputs.version }}
+    generate_release_notes: true
+            env:
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$NEW_VERSION" >> "$GITHUB_OUTPUT"
