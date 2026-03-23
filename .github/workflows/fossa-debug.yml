@@ -1,0 +1,59 @@
+name: FOSSA Debug
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fossa-debug:
+    name: FOSSA Debug Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go 1.24
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run FOSSA analysis in debug mode
+        uses: fossas/fossa-action@v1.4.0
+        with:
+          api-key: ${{ secrets.FOSSA_API_KEY }}
+          debug: true
+
+      - name: Upload FOSSA debug bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fossa-debug-bundle
+          path: ./fossa.debug.json.gz
+          retention-days: 7
+
+      - name: Print detected dependencies
+        if: always()
+        shell: bash
+        run: |
+          curl -fsSL https://github.com/fossas/fossa-cli/releases/latest/download/fossa_linux_amd64.zip -o fossa.zip
+          unzip -q fossa.zip
+          chmod +x fossa
+          echo "=== FOSSA CLI VERSION ==="
+          ./fossa --version
+          echo "=== DETECTED DEPENDENCIES ==="
+          ./fossa analyze --output 2>&1 || true
+          echo "=== FOSSA TEST RESULT ==="
+          ./fossa test --debug 2>&1 || true
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
