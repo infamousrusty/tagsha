@@ -25,7 +25,7 @@ export default defineConfig({
       output: {
         advancedChunks: {
           groups: [
-            { name: 'vendor', test: //react(?:-dom)?/ },
+            { name: 'vendor', test: new RegExp('node_modules/react') },
           ],
         },
       },
