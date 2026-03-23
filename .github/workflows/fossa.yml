@@ -32,13 +32,15 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Run FOSSA analysis
+            - name: Run FOSSA analysis
         uses: fossas/fossa-action@v1.4.0
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
+          branch: ${{ github.head_ref || github.ref_name }}
 
       - name: Run FOSSA licence and quality test
         uses: fossas/fossa-action@v1.4.0
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
           run-tests: true
+          branch: ${{ github.head_ref || github.ref_name }}
