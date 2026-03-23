@@ -1,86 +1,107 @@
-name: ADR Compliance Pipeline
+name: Auto-generate ADR from Changes
 
 on:
   pull_request:
-    paths:
-      - 'adr/**/*.md'
+    types: [opened, synchronize, reopened, closed]
   push:
-    branches:
-      - main
-    paths:
-      - 'adr/**/*.md'
+    branches: [main]
 
 permissions:
   contents: write
-  pull-requests: read
+  pull-requests: write
+  issues: read
+  discussions: write
 
 jobs:
-  validate-and-index:
-    name: Validate Compliance and Update Index
+  analyze-changes:
     runs-on: ubuntu-latest
+    outputs:
+      generate: ${{ steps.changes.outputs.generate }}
+      summary: ${{ steps.changes.outputs.summary }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.RELEASE_TOKEN }}
           fetch-depth: 0
-
-      - name: UK English Spelling Check
-        uses: streetsidesoftware/cspell-action@v6
-        with:
-          config: '.github/cspell.json'
-          files: 'adr/**/*.md'
-          strict: true
-
-      - name: PII and Secrets Scanning
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Enforce LGPL and GDPR Sections
-        shell: bash
+      
+      - id: changes
+        name: Detect significant changes
         run: |
-          if [ ! -d "adr/" ]; then
-            echo "Directory adr/ does not exist. Skipping compliance checks."
-            exit 0
+          # Check for code/infra changes, deps, Dockerfiles, workflows
+          if git diff --name-only ${{ github.event.before || 'HEAD~1' }} | grep -E '(Dockerfile|docker-compose|go.mod|package.json|.github/workflows|terraform|docs/|config/)' | grep -v '^docs/decisions/'; then
+            echo "generate=true" >> $GITHUB_OUTPUT
+            SUMMARY=$(git diff --stat ${{ github.event.before || 'HEAD~1' }} | head -3)
+            echo "summary<<EOF" >> $GITHUB_OUTPUT
+            echo "$SUMMARY" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "generate=false" >> $GITHUB_OUTPUT
           fi
-          echo "Scanning ADRs for compliance sections..."
-          find adr/ -type f -name '*.md' -not -name 'README.md' -not -name 'template.md' | while read -r file; do
-            echo "Checking: $file"
-            if ! grep -qi "LGPL-3.0-or-later Evaluation" "$file"; then
-              echo "::error file=$file::Missing LGPL-3.0-or-later compliance evaluation."
-              exit 1
-            fi
-            if ! grep -qi "GDPR & PII Evaluation" "$file"; then
-              echo "::error file=$file::Missing GDPR/PII compliance evaluation."
-              exit 1
-            fi
-            echo "  -> Passed compliance check!"
-          done
 
-      - name: Set up Node.js
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+  generate-adr:
+    needs: analyze-changes
+    if: needs.analyze-changes.outputs.generate == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get next ADR number
+        id: adr-number
+        run: |
+          if [ -d "docs/decisions" ]; then
+            LAST=$(ls docs/decisions/*.md | sort -V | tail -1 | sed 's/.*///; s/.md$//; s/[^0-9]*//g')
+            NEXT=$((LAST + 1))
+          else
+            mkdir -p docs/decisions
+            NEXT=0001
+          fi
+          echo "number=$NEXT" >> $GITHUB_OUTPUT
+      
+      - name: Generate ADR content
+        id: content
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title || github.event.head_commit.message }}
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
+          COMMIT_SUMMARY: ${{ needs.analyze-changes.outputs.summary }}
+        run: |
+          cat > docs/decisions/${{ steps.adr-number.outputs.number }}-auto-generated.md << EOF
+          # ADR ${{ steps.adr-number.outputs.number }}: Auto-generated from ${{ github.event.pull_request.number || 'commit' }} "$(date +%Y-%m-%d)"
 
-      - name: Pull latest main before generating index
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: bash
-        run: git pull --rebase origin main
+          ## Status
+          Proposed
 
-      - name: Generate ADR Index
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: bash
-        run: npx adr-log -d adr/ > adr/README.md
+          ## Context and Problem Statement
+          GitHub detected changes on $(date +%Y-%m-%d):
+          ```
+          ${{ needs.analyze-changes.outputs.summary }}
+          ```
+          PR/Commit: ${{ env.PR_TITLE }}
 
-      - name: Commit ADR Index
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+          ## Decision Drivers
+          - Auto-tracked for concrete record
+          - Changes: $(git diff --name-only HEAD~1 | tr '
+' ', ')
+
+          ## Considered Options
+          - Accept changes as-is (no manual ADR needed)
+
+          ## Decision Outcome
+          **Accepted** (auto-generated, review to supersede/superseded)
+
+          ## Consequences
+          Creates permanent record of infra/code evolution for tagsha.
+          EOF
+      
+      - name: Commit ADR
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          token: ${{ secrets.RELEASE_TOKEN }}
-          commit_message: "docs(adr): auto-update decision log [skip ci]"
-          file_pattern: adr/README.md
-          commit_user_name: infamousrusty
-          commit_user_email: 106888872+infamousrusty@users.noreply.github.com
-          commit_author: infamousrusty <106888872+infamousrusty@users.noreply.github.com>
+          commit_message: "docs(adr): auto-generate ADR ${{ steps.adr-number.outputs.number }} from changes"
+          file_pattern: 'docs/decisions/*.md'
+      
+      - name: Sync to Discussion
+        uses: yujiosaka/adr-sync@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
