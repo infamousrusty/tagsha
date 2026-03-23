@@ -4,12 +4,20 @@ on:
   push:
     branches: [main]
     paths:
-      - '**.go'
+      - '**/*.go'
       - 'go.mod'
       - 'Dockerfile**'
       - '.github/workflows/**'
       - 'terraform/**'
+      - 'config/**'
   pull_request:
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'Dockerfile**'
+      - '.github/workflows/**'
+      - 'terraform/**'
+      - 'config/**'
 
 permissions:
   contents: write
@@ -17,57 +25,111 @@ permissions:
   discussions: write
 
 jobs:
-  auto-adr:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changed_files: ${{ steps.files.outputs.changed_files }}
+      should_generate: ${{ steps.files.outputs.changed_files != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: files
+        name: List changed files
+        run: |
+          set -euo pipefail
+
+          BASE_SHA="${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}"
+          HEAD_SHA="${{ github.sha }}"
+
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
+
+          {
+            echo "changed_files<<EOF"
+            printf '%s\n' "$CHANGED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  generate-adr:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.should_generate == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
-      
-      - name: Detect & generate ADR
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title || github.event.head_commit.message || 'changes' }}
-        run: |
-          # Changed files
-          CHANGED=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
-          
-          # Skip if no relevant changes
-          if [[ ! "$CHANGED" =~ (go.mod|Dockerfile|.github/workflows|terraform) ]]; then
-            echo "No ADR-worthy changes"
-            exit 0
-          fi
-          
-          # Next ID
-          mkdir -p docs/decisions
-          pushd docs/decisions >/dev/null
-          LAST=$(ls -1 [0-9]*.md 2>/dev/null | sed 's/^0*([1-9][0-9]*)-.*/\u0001/' | sort -n | tail -1 || echo 0)
-          ID=$(printf "%04d" $((LAST + 1)))
-          popd >/dev/null
-          
-          # Write ADR
-          cat > "docs/decisions/${ID}-auto-${PR_TITLE//[^a-zA-Z0-9]/-}.md" << EOF
-# ADR $ID: Auto-generated $(date +%Y-%m-%d)
+          fetch-depth: 0
 
-**Status:** proposed
+      - name: Get next ADR ID
+        id: adr-id
+        run: |
+          set -euo pipefail
+          mkdir -p docs/decisions
+
+          LAST_ID=$(find docs/decisions -maxdepth 1 -type f -name '*.md' -printf '%f\n' 2>/dev/null \
+            | sed -E 's/^([0-9]{4})-.*/\1/' \
+            | sort -n \
+            | tail -n 1)
+
+          LAST_ID=${LAST_ID:-0}
+          NEXT_ID=$(printf "%04d" "$((10#$LAST_ID + 1))")
+
+          echo "next_id=$NEXT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Create ADR content
+        id: adr-file
+        env:
+          TITLE: ${{ github.event.pull_request.title || github.event.head_commit.message || 'Untriaged changes' }}
+          FILES: ${{ needs.detect-changes.outputs.changed_files }}
+        run: |
+          set -euo pipefail
+
+          SLUG=$(printf '%s' "$TITLE" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' \
+            | cut -c1-50)
+
+          ADR_FILE="docs/decisions/${{ steps.adr-id.outputs.next_id }}-${SLUG}.md"
+
+          cat > "$ADR_FILE" <<EOF
+# ADR ${{ steps.adr-id.outputs.next_id }}: Auto-generated from commit/PR
+
+## Status
+**proposed**
+
+## Timestamp
+$(date -u '+%Y-%m-%d %H:%M UTC')
 
 ## Context
-Auto-tracked changes:
-```
-$CHANGED
-```
+Auto-detected changes in tagsha:
+\`\`\`
+${FILES}
+\`\`\`
 
-Title: $PR_TITLE
+Trigger: ${TITLE}
 
 ## Decision
-**accepted** - permanent record created
+**accepted** - auto-tracked infrastructure/code evolution
 
-## Pros
-Concrete change history without manual work
+## Positive Consequences
+- Concrete record of all significant changes
+- No manual tracking overhead
+
+## Review
+Edit status to: accepted | rejected | superseded | deprecated
 EOF
-      
+
+          echo "file=$ADR_FILE" >> "$GITHUB_OUTPUT"
+
       - name: Commit ADR
         uses: stefanzweifel/git-auto-commit-action@v5
-        if: always()
         with:
-          commit_message: "docs(adr): auto #$ID [skip ci]"
-          file_pattern: 'docs/decisions/'
+          commit_message: "docs(adr): auto ${{ steps.adr-id.outputs.next_id }} from changes [skip ci]"
+          file_pattern: docs/decisions/
+
+      - name: Sync ADR to Discussion
+        if: always()
+        uses: yujiosaka/adr-sync@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
