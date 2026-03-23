@@ -201,7 +201,7 @@ jobs:
   # ---------------------------------------------------------------------------
   # Semantic Versioning & Release (on main push/manual)
   # ---------------------------------------------------------------------------
-    release:
+  release:
     name: Semantic Release
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -224,6 +224,8 @@ jobs:
 
       - name: Determine version
         id: version
+        env:
+          VERSION_TYPE: ${{ github.event.inputs.version_type || 'patch' }}
         run: |
           set -Eeuo pipefail
 
@@ -238,8 +240,6 @@ jobs:
           MAJOR=${MAJOR:-0}
           MINOR=${MINOR:-0}
           PATCH=${PATCH:-0}
-
-          VERSION_TYPE="${VERSION_TYPE:-patch}"
 
           if [ "$VERSION_TYPE" = "major" ]; then
             MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
