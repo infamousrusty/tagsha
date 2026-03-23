@@ -13,8 +13,6 @@ on:
       - '.github/workflows/**'
       - 'terraform/**'
       - 'config/**'
-    paths-ignore:
-      - 'docs/decisions/**'
 
 permissions:
   contents: write
@@ -45,6 +43,7 @@ jobs:
 
           mkdir -p docs/decisions
 
+          # --- Resolve base safely ---
           if [ -z "${BASE_SHA:-}" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
             BASE_SHA="$(git rev-list --max-parents=0 "$HEAD_SHA" | tail -n 1)"
           fi
@@ -56,6 +55,18 @@ jobs:
             exit 0
           fi
 
+          # --- Skip if only ADR files changed ---
+          CHANGED_FILES=$(for sha in $COMMITS; do
+            git show --name-only --format= "$sha"
+          done | sed '/^$/d')
+
+          if ! printf '%s\n' "$CHANGED_FILES" | grep -qv '^docs/decisions/'; then
+            echo "Only ADR changes detected — skipping"
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # --- Determine next ADR ID ---
           max_id=0
           while IFS= read -r file; do
             [ -n "$file" ] || continue
@@ -86,12 +97,15 @@ jobs:
 
           count=0
 
+          # --- Process commits ---
           for sha in $COMMITS; do
             files="$(git show --format= --name-only "$sha" | sed '/^$/d' || true)"
 
             [ -n "$files" ] || continue
 
-            if ! printf '%s\n' "$files" | grep -Eq '(^|/)(terraform|config|\.github/workflows)/|(^|/)Dockerfile(\..*)?$|(^|/)[^/]+\.go$|^go\.mod$'; then
+            # Filter relevant files only
+            if ! printf '%s\n' "$files" | grep -Eq \
+              '(^|/)(terraform|config|\.github/workflows)/|(^|/)Dockerfile(\..*)?$|(^|/)[^/]+\.go$|^go\.mod$'; then
               continue
             fi
 
