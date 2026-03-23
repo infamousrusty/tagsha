@@ -201,66 +201,66 @@ jobs:
   # ---------------------------------------------------------------------------
   # Semantic Versioning & Release (on main push/manual)
   # ---------------------------------------------------------------------------
-  release:
-  name: Semantic Release
-  runs-on: ubuntu-latest
-  timeout-minutes: 10
+    release:
+    name: Semantic Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
-  needs: [backend-test, frontend-test, security-scan]
+    needs: [backend-test, frontend-test, security-scan]
 
-  if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
 
-  permissions:
-    contents: write
+    permissions:
+      contents: write
 
-  outputs:
-    version: ${{ steps.release.outputs.version }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
 
-  steps:
-    - name: Checkout
-      uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-    - name: Determine version
-      id: version
-      run: |
-        set -Eeuo pipefail
+      - name: Determine version
+        id: version
+        run: |
+          set -Eeuo pipefail
 
-        git fetch --tags --force origin
+          git fetch --tags --force origin
 
-        LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1)
-        LATEST_TAG=${LATEST_TAG:-v0.0.0}
+          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+          LATEST_TAG=${LATEST_TAG:-v0.0.0}
 
-        VERSION_NO_V="${LATEST_TAG#v}"
-        IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NO_V"
+          VERSION_NO_V="${LATEST_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NO_V"
 
-        MAJOR=${MAJOR:-0}
-        MINOR=${MINOR:-0}
-        PATCH=${PATCH:-0}
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
 
-        VERSION_TYPE="${VERSION_TYPE:-patch}"
+          VERSION_TYPE="${VERSION_TYPE:-patch}"
 
-        if [ "$VERSION_TYPE" = "major" ]; then
-          MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
-        elif [ "$VERSION_TYPE" = "minor" ]; then
-          MINOR=$((MINOR + 1)); PATCH=0
-        else
-          PATCH=$((PATCH + 1))
-        fi
+          if [ "$VERSION_TYPE" = "major" ]; then
+            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
+          elif [ "$VERSION_TYPE" = "minor" ]; then
+            MINOR=$((MINOR + 1)); PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
 
-        NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
 
-        echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ steps.version.outputs.version }}
-        name: Release ${{ steps.version.outputs.version }}
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
   # Docker — build, push to GHCR, container scan
