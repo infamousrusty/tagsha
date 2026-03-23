@@ -1,79 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_SHA="${BASE_SHA:-}"
-HEAD_SHA="${HEAD_SHA:-}"
-RUN_URL="${RUN_URL:-}"
+# --- Config ---
+BASE_BRANCH="${BASE_BRANCH:-main}"
+
+# --- Ensure we have full history ---
+git fetch origin "${BASE_BRANCH}:${BASE_BRANCH}" --depth=0 || git fetch origin "${BASE_BRANCH}"
+
+# --- Resolve HEAD safely ---
+HEAD_SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
+
+# --- Safety checks ---
+if [ -z "${HEAD_SHA}" ]; then
+  echo "ERROR: HEAD_SHA is empty"
+  exit 1
+fi
+
+if [ -z "$(git rev-parse "$BASE_BRANCH" 2>/dev/null || true)" ]; then
+  echo "ERROR: BASE_BRANCH '$BASE_BRANCH' not found locally"
+  exit 1
+fi
+
+# --- Diff commits between base and head ---
+COMMITS="$(git rev-list --reverse "${BASE_BRANCH}..${HEAD_SHA}" || true)"
+
+# Nothing to process
+[ -z "$COMMITS" ] && exit 0
 
 mkdir -p docs/decisions
 
 yaml_escape() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
-}
-
-classify_tags() {
-  local title_lower
-  declare -A tags=()
-
-  title_lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
-
-  while IFS= read -r path; do
-    [ -n "$path" ] || continue
-
-    case "$path" in
-      terraform/*|*/terraform/*) tags[infra]=1 ;;
-      .github/workflows/*|*/.github/workflows/*) tags[ci]=1 ;;
-      config/*|*/config/*) tags[config]=1 ;;
-    esac
-
-    case "$path" in
-      *.go|go.mod) tags[runtime]=1 ;;
-    esac
-  done
-
-  if printf '%s' "$title_lower" | grep -Eq '(auth|security|secret|token|jwt|tls|crypto|encrypt|password|credential)'; then
-    tags[security]=1
-  fi
-
-  if [ "${#tags[@]}" -eq 0 ]; then
-    tags[general]=1
-  fi
-
-  printf '%s\n' "${!tags[@]}" | sort | paste -sd ', ' -
-}
-
-# Resolve base
-if [ -z "$BASE_SHA" ] || printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
-  BASE_SHA="$(git rev-list --max-parents=0 "$HEAD_SHA" | tail -n 1)"
-fi
-
-COMMITS="$(git rev-list --reverse "${BASE_SHA}..${HEAD_SHA}" || true)"
-
-[ -z "$COMMITS" ] && exit 0
-
-# Skip ADR-only changes
-CHANGED_FILES=$(for sha in $COMMITS; do
-  git show --name-only --format= "$sha"
-done | sed '/^$/d')
-
-if ! printf '%s\n' "$CHANGED_FILES" | grep -qv '^docs/decisions/'; then
-  exit 0
-fi
-
-# Determine next ADR ID
-max_id=0
-while IFS= read -r file; do
-  [ -n "$file" ] || continue
-  id_part="$(basename "$file" | sed -E 's/^([0-9]{4})-.*/\1/')"
-  if printf '%s' "$id_part" | grep -Eq '^[0-9]{4}$'; then
-    n=$((10#$id_part))
-    [ "$n" -gt "$max_id" ] && max_id="$n"
-  fi
-done < <(find docs/decisions -maxdepth 1 -type f -name '*.md' | sort)
-
-next_id() {
-  max_id=$((max_id + 1))
-  printf '%04d' "$max_id"
 }
 
 slugify() {
@@ -83,16 +40,35 @@ slugify() {
     | cut -c1-50
 }
 
+# --- Track existing ADR commits ---
 has_adr_for_commit() {
   grep -Rqs "source_commit: $1" docs/decisions 2>/dev/null
 }
 
+# --- Get next ADR ID ---
+max_id=0
+while IFS= read -r file; do
+  [ -n "$file" ] || continue
+  id_part="$(basename "$file" | sed -E 's/^([0-9]{4})-.*/\1/')"
+  if printf '%s' "$id_part" | grep -Eq '^[0-9]{4}$'; then
+    n=$((10#$id_part))
+    [ "$n" -gt "$max_id" ] && max_id="$n"
+  fi
+done < <(find docs/decisions -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort)
+
+next_id() {
+  max_id=$((max_id + 1))
+  printf '%04d' "$max_id"
+}
+
+# --- Generate ADRs ---
 count=0
 
 for sha in $COMMITS; do
   files="$(git show --format= --name-only "$sha" | sed '/^$/d' || true)"
   [ -z "$files" ] && continue
 
+  # Skip if no relevant files
   if ! printf '%s\n' "$files" | grep -Eq \
     '(^|/)(terraform|config|\.github/workflows)/|(^|/)Dockerfile(\..*)?$|(^|/)[^/]+\.go$|^go\.mod$'; then
     continue
@@ -105,16 +81,13 @@ for sha in $COMMITS; do
   slug="$(slugify "$title")"
   file="docs/decisions/${id}-${slug}.md"
 
-  tags="$(printf '%s\n' "$files" | classify_tags "$title")"
-
   printf '%s\n' \
 "---" \
 "adr_id: \"$id\"" \
 "source_commit: \"$sha\"" \
 "source_type: \"commit\"" \
-"source_run: \"$RUN_URL\"" \
 "status: \"proposed\"" \
-"tags: \"$(yaml_escape "$tags")\"" \
+"tags: \"general\"" \
 "summary: \"$(yaml_escape "$title")\"" \
 "---" \
 "" \

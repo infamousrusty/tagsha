@@ -1,49 +1,66 @@
-name: Auto ADR Pipeline
+name: ADR Auto PR
 
 on:
   push:
     branches: [main]
-    paths:
-      - '**/*.go'
-      - 'go.mod'
-      - 'Dockerfile'
-      - 'Dockerfile.*'
-      - '**/Dockerfile'
-      - '**/Dockerfile.*'
-      - '.github/workflows/**'
-      - 'terraform/**'
-      - 'config/**'
 
 permissions:
   contents: write
-
-concurrency:
-  group: adr-autogen-main
-  cancel-in-progress: false
+  pull-requests: write
 
 jobs:
-  generate-adrs:
+  adr:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Make scripts executable
-        run: chmod +x .github/scripts/*.sh
-
-      - name: Generate ADRs
-        id: generate
+      - name: Setup Git
         run: |
-          COUNT=$(
-            BASE_SHA="${{ github.event.before }}" \
-            HEAD_SHA="${{ github.sha }}" \
-            RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            .github/scripts/adr-generate.sh
-          )
-          echo "count=$COUNT" >> $GITHUB_OUTPUT
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit ADRs
-        if: steps.generate.outputs.count != '0'
-        run: .github/scripts/adr-commit.sh
+      - name: Run ADR generator
+        run: |
+          bash .github/scripts/adr-generate.sh
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create branch and commit
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          BRANCH="adr/auto-$(date +%s)"
+          git checkout -b $BRANCH
+
+          git add docs/decisions/
+          git commit -m "docs(adr): auto-generate ADRs [skip ci]"
+
+          git push origin $BRANCH
+
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.changed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branch = process.env.BRANCH;
+            await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: branch,
+              base: "main",
+              title: "docs(adr): auto-generated ADR update",
+              body: "Automated ADR update via CI"
+            });
+        env:
+          BRANCH: ${{ steps.create-branch.outputs.branch }}
