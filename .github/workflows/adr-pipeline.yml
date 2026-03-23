@@ -174,4 +174,6 @@ EOF
           fi
 
           git commit -m "docs(adr): auto-generate ADRs [skip ci]"
-          git push
+          git pull --rebase origin main
+
+          git push origin HEAD:main
