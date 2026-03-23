@@ -26,61 +26,72 @@ permissions:
 
 jobs:
   detect-changes:
-  runs-on: ubuntu-latest
-  outputs:
-    changed_files: ${{ steps.files.outputs.changed_files }}
-    should_generate: ${{ steps.files.outputs.changed_files != '' }}
-
-  steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - id: base
-      name: Determine base SHA
-      run: |
-        set -euo pipefail
-
-        if [ "${{ github.event_name }}" = "pull_request" ]; then
-          echo "base_sha=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
-        else
-          echo "base_sha=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
-        fi
-
-    - id: files
-      name: List changed files
-      run: |
-        set -euo pipefail
-
-        BASE_SHA="${{ steps.base.outputs.base_sha }}"
-        HEAD_SHA="${{ github.sha }}"
-
-        echo "Comparing: $BASE_SHA -> $HEAD_SHA"
-
-        CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
-
-        {
-          echo "changed_files<<EOF"
-          printf '%s\n' "$CHANGED"
-          echo "EOF"
-        } >> "$GITHUB_OUTPUT"
-
-  generate-adr:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.should_generate == 'true'
     runs-on: ubuntu-latest
+    outputs:
+      changed_files: ${{ steps.files.outputs.changed_files }}
+      should_generate: ${{ steps.files.outputs.changed_files != '' }}
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # --- SAFE BASE SHA RESOLUTION ---
+      - id: base_push
+        if: ${{ github.event_name == 'push' }}
+        run: echo "base_sha=${{ github.event.before }}" >> $GITHUB_OUTPUT
+
+      - id: base_pr
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -euo pipefail
+          BASE=$(git merge-base \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}")
+          echo "base_sha=$BASE" >> $GITHUB_OUTPUT
+
+      - id: files
+        name: List changed files
+        run: |
+          set -euo pipefail
+
+          BASE_SHA="${{ steps.base_push.outputs.base_sha || steps.base_pr.outputs.base_sha }}"
+          HEAD_SHA="${{ github.sha }}"
+
+          # fallback for edge cases
+          if [ -z "$BASE_SHA" ] || ! git cat-file -e "$BASE_SHA"^{commit} 2>/dev/null; then
+            BASE_SHA=$(git rev-parse HEAD~1)
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "No changes detected"
+            exit 0
+          fi
+
+          {
+            echo "changed_files<<EOF"
+            printf '%s\n' "$CHANGED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  generate-adr:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.should_generate == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Get next ADR ID
         id: adr-id
         run: |
           set -euo pipefail
+
           mkdir -p docs/decisions
 
-          LAST_ID=$(find docs/decisions -maxdepth 1 -type f -name '*.md' -printf '%f\n' 2>/dev/null \
+          LAST_ID=$(find docs/decisions -maxdepth 1 -type f -name '*.md' -printf '%f\n' \
             | sed -E 's/^([0-9]{4})-.*/\1/' \
             | sort -n \
             | tail -n 1)
@@ -88,10 +99,10 @@ jobs:
           LAST_ID=${LAST_ID:-0}
           NEXT_ID=$(printf "%04d" "$((10#$LAST_ID + 1))")
 
-          echo "next_id=$NEXT_ID" >> "$GITHUB_OUTPUT"
+          echo "next_id=$NEXT_ID" >> $GITHUB_OUTPUT
 
-      - name: Create ADR content
-        id: adr-file
+      - name: Create ADR
+        id: adr
         env:
           TITLE: ${{ github.event.pull_request.title || github.event.head_commit.message || 'Untriaged changes' }}
           FILES: ${{ needs.detect-changes.outputs.changed_files }}
@@ -103,19 +114,18 @@ jobs:
             | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' \
             | cut -c1-50)
 
-          ADR_FILE="docs/decisions/${{ steps.adr-id.outputs.next_id }}-${SLUG}.md"
+          FILE="docs/decisions/${{ steps.adr-id.outputs.next_id }}-$SLUG.md"
 
-          cat > "$ADR_FILE" <<EOF
-# ADR ${{ steps.adr-id.outputs.next_id }}: Auto-generated from commit/PR
+          cat > "$FILE" <<EOF
+# ADR ${{ steps.adr-id.outputs.next_id }}: Auto-generated
 
 ## Status
-**proposed**
+proposed
 
 ## Timestamp
 $(date -u '+%Y-%m-%d %H:%M UTC')
 
 ## Context
-Auto-detected changes in tagsha:
 \`\`\`
 ${FILES}
 \`\`\`
@@ -123,25 +133,22 @@ ${FILES}
 Trigger: ${TITLE}
 
 ## Decision
-**accepted** - auto-tracked infrastructure/code evolution
+accepted
 
-## Positive Consequences
-- Concrete record of all significant changes
-- No manual tracking overhead
-
-## Review
-Edit status to: accepted | rejected | superseded | deprecated
+## Consequences
+- Automated traceability
+- Zero manual overhead
 EOF
 
-          echo "file=$ADR_FILE" >> "$GITHUB_OUTPUT"
+          echo "file=$FILE" >> $GITHUB_OUTPUT
 
       - name: Commit ADR
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "docs(adr): auto ${{ steps.adr-id.outputs.next_id }} from changes [skip ci]"
+          commit_message: "docs(adr): auto ${{ steps.adr-id.outputs.next_id }} [skip ci]"
           file_pattern: docs/decisions/
 
-      - name: Sync ADR to Discussion
+      - name: Sync ADR
         if: always()
         uses: yujiosaka/adr-sync@v1
         with:
