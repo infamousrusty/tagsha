@@ -1,6 +1,7 @@
 import { useRef, useCallback, useState, useEffect } from 'react'
 import type { Registry } from '../types'
 import type { Toast } from '../App'
+import type { JSX } from 'react';
 
 const EXAMPLES: Record<Registry, string[]> = {
   ghcr:      ['ghcr.io/infamousrusty/tagsha:latest', 'ghcr.io/cli/cli:v2.45.0'],

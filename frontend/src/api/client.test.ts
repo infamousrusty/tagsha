@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 // Copyright (C) 2026 infamousrusty
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { fetchTags, resolveQuery } from './client'
 
 const mockFetch = vi.fn()
-global.fetch = mockFetch
+
+beforeEach(() => {
+  vi.stubGlobal('fetch', mockFetch)
+  mockFetch.mockReset()
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('fetchTags', () => {
-  beforeEach(() => mockFetch.mockReset())
-
   it('returns data and cache status on success', async () => {
     const mockData = { owner: 'torvalds', repo: 'linux', tags: [], total_count: 0 }
     mockFetch.mockResolvedValueOnce({
@@ -37,6 +43,7 @@ describe('resolveQuery', () => {
   it('parses and returns owner/repo', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
+      headers: { get: () => null },
       json: async () => ({ owner: 'golang', repo: 'go', redirect_url: '/api/v1/tags/golang/go' }),
     })
     const result = await resolveQuery('golang/go')
