@@ -32,7 +32,7 @@ jobs:
         with:
           node-version: '20'
 
-            - name: Run FOSSA analysis
+      - name: Run FOSSA analysis
         uses: fossas/fossa-action@v1.4.0
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
