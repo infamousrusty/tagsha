@@ -30,6 +30,11 @@ jobs:
         with:
           node-version: '20'
 
+      - name: FOSSA Analyze
+        uses: fossas/fossa-action@v1.4.0
+        with:
+          api-key: ${{ secrets.FOSSA_API_KEY }}
+
       - name: FOSSA Scan + Test
         uses: fossas/fossa-action@v1.4.0
         with:
