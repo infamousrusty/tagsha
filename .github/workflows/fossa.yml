@@ -39,5 +39,4 @@ jobs:
         uses: fossas/fossa-action@v1.4.0
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
-          project: TAGSHA
           run-tests: true
