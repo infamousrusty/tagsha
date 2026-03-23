@@ -43,4 +43,3 @@ jobs:
         with:
           api-key: ${{ secrets.FOSSA_API_KEY }}
           run-tests: true
-          branch: ${{ github.head_ref || github.ref_name }}
