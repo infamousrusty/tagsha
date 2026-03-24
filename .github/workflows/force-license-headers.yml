@@ -87,6 +87,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
+          persist-credentials: false
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore(license): apply SPDX headers"
           title: "chore: apply missing SPDX license headers"
