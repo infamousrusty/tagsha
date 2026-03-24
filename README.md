@@ -212,7 +212,7 @@ See [docs/deployment.md](docs/deployment.md) for Grafana access details.
 
 ## License
 
- LGPL-3.0-or-later
+ [LGPL-3.0-or-later](LICENSE)
 
 
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Finfamousrusty%2Ftagsha.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Finfamousrusty%2Ftagsha?ref=badge_large)
