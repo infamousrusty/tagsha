@@ -26,7 +26,7 @@ jobs:
         run: npm install -g prettier markdownlint-cli cspell
 
       - name: Generate ADR Markdown
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           TITLE: ${{ github.event.issue.title }}
           BODY: ${{ github.event.issue.body }}
@@ -81,7 +81,7 @@ jobs:
           delete-branch: true
 
       - name: Close Issue
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             github.rest.issues.update({
